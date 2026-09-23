@@ -76,8 +76,14 @@ export function hasMaestroScreenshot(runId: string): boolean {
  * Maestro finds Flutter web elements through the semantics overlay, which is
  * off unless the app asks for it. Most apps gate that call behind a compile-time
  * flag, so every web build requests it; a project can add its own defines on top.
+ *
+ * Dev tools are requested for the same reason: the flows log in with the
+ * long-press gesture that a debug build exposes, and a release web build has
+ * kDebugMode off, so without this the flows stall on the login screen. The app
+ * still requires its development flavor, so enabling these cannot leak into a
+ * production build.
  */
-const BASE_DART_DEFINES = ["ENABLE_SEMANTICS=true"];
+const BASE_DART_DEFINES = ["ENABLE_SEMANTICS=true", "ENABLE_DEV_TOOLS=true"];
 
 /**
  * Builds the --dart-define arguments for a web build. Malformed entries are
