@@ -55,11 +55,11 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <main>
-      <h1>Change password</h1>
-      <p className="subtitle">
-        <a href="/">Back to dashboard</a>
-      </p>
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Change password</h2>
+        <span className="muted">Changing it signs out your other sessions</span>
+      </div>
 
       <form onSubmit={handleSubmit}>
         <label htmlFor="currentPassword">Current password</label>
@@ -99,6 +99,6 @@ export default function ChangePasswordPage() {
           {submitting ? "Saving…" : "Change password"}
         </button>
       </form>
-    </main>
+    </section>
   );
 }

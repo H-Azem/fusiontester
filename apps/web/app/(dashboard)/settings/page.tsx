@@ -126,11 +126,11 @@ export default function GitlabSettingsPage() {
   }
 
   return (
-    <main>
-      <h1>GitLab connection</h1>
-      <p className="subtitle">
-        <a href="/">Back to dashboard</a>
-      </p>
+    <section className="panel">
+      <div className="panel-head">
+        <h2>GitLab connection</h2>
+        <span className="muted">Source of the repositories under test</span>
+      </div>
 
       {config?.configured && (
         <p className="muted">
@@ -252,6 +252,6 @@ export default function GitlabSettingsPage() {
           ))}
         </section>
       )}
-    </main>
+    </section>
   );
 }

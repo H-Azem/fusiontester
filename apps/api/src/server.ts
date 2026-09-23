@@ -1,12 +1,16 @@
 import { buildApp } from "./app.js";
 import { config } from "./config.js";
 import { runMigrations } from "./db/index.js";
+import { startRunWorker } from "./runs/worker.js";
 import { ensureDefaultAdmin } from "./seed.js";
 
 const app = await buildApp({ logger: true });
 
 await runMigrations();
 await ensureDefaultAdmin();
+
+// Runs execute here, not in the browser, so closing the dashboard cannot stop them.
+startRunWorker();
 
 if (config.adminPassword === "admin" && config.isProduction) {
   app.log.warn(

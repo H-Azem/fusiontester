@@ -171,7 +171,10 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
           lastVerifyOk: result.ok,
           lastVerifyError: result.ok
             ? null
-            : (result.error ?? result.clone.message ?? "Verification failed"),
+            : (result.error ??
+              (result.missingScopes.length > 0
+                ? `Missing scope(s): ${result.missingScopes.join(", ")}`
+                : (result.clone.message ?? "Verification failed"))),
         })
         .where(eq(gitlabConnections.id, row.id));
     }

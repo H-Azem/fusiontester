@@ -5,6 +5,9 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { enforceTrustedOrigin } from "./auth/security.js";
 import { config } from "./config.js";
 import { authRoutes } from "./routes/auth.js";
+import { gitlabRoutes } from "./routes/gitlab.js";
+import { pinRoutes } from "./routes/pins.js";
+import { runRoutes } from "./routes/runs.js";
 import { settingsRoutes } from "./routes/settings.js";
 
 export type BuildAppOptions = {
@@ -38,6 +41,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   await app.register(authRoutes);
   await app.register(settingsRoutes);
+  await app.register(gitlabRoutes);
+  await app.register(pinRoutes);
+  await app.register(runRoutes);
 
   return app;
 }
