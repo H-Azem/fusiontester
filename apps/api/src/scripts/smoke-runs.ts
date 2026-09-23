@@ -29,7 +29,7 @@ import {
   users,
 } from "../db/schema.js";
 import { startRunWorker } from "../runs/worker.js";
-import { dartDefineArgs, workspaceFor } from "../runs/pipeline.js";
+import { commandLine, dartDefineArgs, workspaceFor } from "../runs/pipeline.js";
 import { runCommand } from "../runs/command.js";
 import { ensureDefaultAdmin } from "../seed.js";
 
@@ -341,6 +341,12 @@ async function main(): Promise<void> {
       "--dart-define=ENABLE_SEMANTICS=true --dart-define=space=1",
     dartDefineArgs("nonsense with space=1"),
   );
+  check(
+    "a command is rendered the way it would be typed",
+    commandLine("flutter", ["build", "web", "-t", "lib/main.dart"]) ===
+      "$ flutter build web -t lib/main.dart",
+    commandLine("flutter", ["build", "web", "-t", "lib/main.dart"]),
+  );
 
   const freshSettings = (
     await app.inject({ method: "GET", url: "/projects/103/settings", headers: auth })
@@ -396,6 +402,16 @@ async function main(): Promise<void> {
   check(
     "the web build produced output",
     (stepMap.build?.output ?? "").length > 0,
+    stepMap.build?.output?.slice(0, 200),
+  );
+  check(
+    "the build stage shows the exact command it ran",
+    (stepMap.build?.output ?? "").startsWith("$ flutter build web -t lib/main.dart"),
+    stepMap.build?.output?.slice(0, 120),
+  );
+  check(
+    "the shown command includes the semantics define",
+    (stepMap.build?.output ?? "").includes("--dart-define=ENABLE_SEMANTICS=true"),
     stepMap.build?.output?.slice(0, 200),
   );
   check(

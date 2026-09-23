@@ -92,6 +92,14 @@ export function dartDefineArgs(projectDefines: string): string[] {
   return [...BASE_DART_DEFINES, ...extra].map((entry) => `--dart-define=${entry}`);
 }
 
+/**
+ * Renders a command the way you would type it, so a run's output shows exactly
+ * what was executed — including which defines reached the build.
+ */
+export function commandLine(command: string, args: string[]): string {
+  return `$ ${command} ${args.join(" ")}`;
+}
+
 export async function enqueueRun(input: {
   projectId: number;
   projectPath: string;
@@ -233,16 +241,20 @@ export async function executeRun(runId: string): Promise<void> {
     await finishStage(runId, "launch", `Using "${target.name}" → ${target.program}`);
 
     await startStage(runId, "build");
-    const build = await runCommand(
-      "flutter",
-      ["build", "web", "-t", target.program, ...dartDefineArgs(run.dartDefines)],
-      repoDir,
-    );
+    const buildArgs = [
+      "build",
+      "web",
+      "-t",
+      target.program,
+      ...dartDefineArgs(run.dartDefines),
+    ];
+    const build = await runCommand("flutter", buildArgs, repoDir);
+    const buildCommand = commandLine("flutter", buildArgs);
     if (!build.ok) {
-      await failRun(runId, "build", build.output);
+      await failRun(runId, "build", `${buildCommand}\n\n${build.output}`);
       return;
     }
-    await finishStage(runId, "build", build.output || "Web build succeeded.");
+    await finishStage(runId, "build", `${buildCommand}\n\n${build.output || "Web build succeeded."}`);
 
     await startStage(runId, "browse");
     const browserPath = findBrowserExecutable();
