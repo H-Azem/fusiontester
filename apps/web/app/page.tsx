@@ -1,17 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:4000";
-
-type Health = {
-  status: string;
-  service: string;
-  version: string;
-  timestamp: string;
-};
+type User = { id: string; username: string; role: string };
+type Health = { status: string; service: string; version: string; timestamp: string };
 
 export default function Home() {
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,12 +17,20 @@ export default function Home() {
 
     async function load() {
       try {
-        const res = await fetch(`${API_URL}/health`);
-        if (!res.ok) {
-          throw new Error(`API responded with ${res.status}`);
+        const [meResponse, healthResponse] = await Promise.all([
+          fetch("/api/auth/me", { cache: "no-store" }),
+          fetch("/api/health", { cache: "no-store" }),
+        ]);
+
+        if (meResponse.status === 401) {
+          router.replace("/login");
+          return;
         }
-        const data = (await res.json()) as Health;
-        if (!cancelled) setHealth(data);
+
+        if (!cancelled) {
+          setUser((await meResponse.json()).user as User);
+          setHealth((await healthResponse.json()) as Health);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : String(err));
@@ -33,23 +38,44 @@ export default function Home() {
       }
     }
 
-    load();
+    void load();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+  }
 
   return (
     <main>
       <h1>Fusion Tester</h1>
-      <p className="subtitle">Phase 1 — dashboard talking to the API</p>
+      <p className="subtitle">
+        {user ? (
+          <>
+            Signed in as <strong>{user.username}</strong> ({user.role})
+          </>
+        ) : (
+          "Loading…"
+        )}
+      </p>
+
+      <div className="actions">
+        <a href="/settings/gitlab">GitLab connection</a>
+        <a href="/change-password">Change password</a>
+        <button type="button" onClick={() => void handleLogout()}>
+          Sign out
+        </button>
+      </div>
+
+      {error && <p className="error">{error}</p>}
 
       <section>
         <h2>API health</h2>
-        {error && <pre className="error">Unreachable: {error}</pre>}
-        {!error && !health && <pre>Loading…</pre>}
-        {health && <pre>{JSON.stringify(health, null, 2)}</pre>}
+        <pre>{health ? JSON.stringify(health, null, 2) : "Loading…"}</pre>
       </section>
     </main>
   );

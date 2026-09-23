@@ -1,22 +1,21 @@
-import Fastify from "fastify";
-import cors from "@fastify/cors";
+import { buildApp } from "./app.js";
+import { config } from "./config.js";
+import { runMigrations } from "./db/index.js";
+import { ensureDefaultAdmin } from "./seed.js";
 
-const PORT = Number(process.env.PORT ?? 4000);
-const HOST = process.env.HOST ?? "127.0.0.1";
+const app = await buildApp({ logger: true });
 
-const app = Fastify({ logger: true });
+await runMigrations();
+await ensureDefaultAdmin();
 
-await app.register(cors, { origin: true });
-
-app.get("/health", async () => ({
-  status: "ok",
-  service: "fusion-tester-api",
-  version: "0.0.0",
-  timestamp: new Date().toISOString(),
-}));
+if (config.adminPassword === "admin" && config.isProduction) {
+  app.log.warn(
+    "Default admin password is still active in production. Change it from the dashboard.",
+  );
+}
 
 try {
-  await app.listen({ port: PORT, host: HOST });
+  await app.listen({ port: config.port, host: config.host });
 } catch (error) {
   app.log.error(error);
   process.exit(1);
