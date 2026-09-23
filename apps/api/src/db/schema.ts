@@ -150,6 +150,8 @@ export const runs = pgTable(
     environments: jsonb("environments").$type<string[]>().notNull().default([]),
     status: text("status").notNull().default("queued"),
     currentStep: text("current_step").notNull().default("queued"),
+    orientation: text("orientation").notNull().default("horizontal"),
+    dartDefines: text("dart_defines").notNull().default(""),
     errorMessage: text("error_message"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp("started_at", { withTimezone: true }),
@@ -157,6 +159,16 @@ export const runs = pgTable(
   },
   (table) => [index("runs_status_created_idx").on(table.status, table.createdAt)],
 );
+
+/** Per-repository preferences that should survive between runs. */
+export const projectSettings = pgTable("project_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: integer("project_id").notNull().unique(),
+  orientation: text("orientation").notNull().default("horizontal"),
+  dartDefines: text("dart_defines").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /** Per-stage progress for a run, so the dashboard can show where it is. */
 export const runSteps = pgTable(

@@ -8,7 +8,7 @@
  * and boots an app for real — expect a couple of minutes.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 
@@ -22,13 +22,14 @@ import {
   gitlabConnections,
   ipBlocks,
   loginAttempts,
+  projectSettings,
   runSteps,
   runs,
   sessions,
   users,
 } from "../db/schema.js";
 import { startRunWorker } from "../runs/worker.js";
-import { workspaceFor } from "../runs/pipeline.js";
+import { dartDefineArgs, workspaceFor } from "../runs/pipeline.js";
 import { runCommand } from "../runs/command.js";
 import { ensureDefaultAdmin } from "../seed.js";
 
@@ -70,6 +71,67 @@ async function createFixtureRepo(): Promise<{ root: string; projectPath: string 
     300_000,
   );
   if (!created.ok) throw new Error(`flutter create failed:\n${created.output}`);
+
+  // Maestro finds Flutter web elements through the semantics overlay, which is
+  // off by default. Without this the flows cannot see anything.
+  //
+  // This is gated behind ENABLE_SEMANTICS on purpose: it mirrors how real apps
+  // ship the call, so the suite fails if the build stops passing the define.
+  const mainDartPath = join(workDir, "lib", "main.dart");
+  const mainDart = await readFile(mainDartPath, "utf8");
+  await writeFile(
+    mainDartPath,
+    mainDart
+      .replace(
+        "import 'package:flutter/material.dart';",
+        "import 'package:flutter/material.dart';\nimport 'package:flutter/rendering.dart';",
+      )
+      .replace(
+        "void main() {",
+        [
+          "void main() {",
+          "  WidgetsFlutterBinding.ensureInitialized();",
+          "  if (const bool.fromEnvironment('ENABLE_SEMANTICS')) {",
+          "    SemanticsBinding.instance.ensureSemantics();",
+          "  }",
+        ].join("\n"),
+      ),
+    "utf8",
+  );
+
+  // Two flows: one that should pass and one that must fail, so both the
+  // success and failure paths are covered.
+  await mkdir(join(workDir, ".maestro", "flows", "smoke"), { recursive: true });
+  await mkdir(join(workDir, ".maestro", "flows", "broken"), { recursive: true });
+
+  await writeFile(
+    join(workDir, ".maestro", "flows", "smoke", "full_test.yaml"),
+    [
+      "appId: com.example.demo_app",
+      "---",
+      "- launchApp",
+      '- assertVisible: "Flutter Demo Home Page"',
+      "- takeScreenshot: smoke_shot",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  await writeFile(
+    join(workDir, ".maestro", "flows", "broken", "full_test.yaml"),
+    [
+      "appId: com.example.demo_app",
+      "---",
+      "- launchApp",
+      '- assertVisible: "A label that does not exist anywhere"',
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  await writeFile(
+    join(workDir, ".maestro", "config.yaml"),
+    ["env:", "  APP_ID: com.example.demo_app", ""].join("\n"),
+    "utf8",
+  );
 
   await mkdir(join(workDir, ".vscode"), { recursive: true });
   await writeFile(
@@ -128,6 +190,7 @@ async function main(): Promise<void> {
   await db.delete(ipBlocks);
   await db.delete(captchaChallenges);
   await db.delete(gitlabConnections);
+  await db.delete(projectSettings);
 
   // The admin user has to exist before the password can be pinned.
   await ensureDefaultAdmin();
@@ -188,7 +251,7 @@ async function main(): Promise<void> {
       projectId: 101,
       projectPath: fixture.projectPath,
       branch: "main",
-      tests: ["orders", "full_app"],
+      tests: ["smoke"],
       runKinds: ["maestro"],
       environments: ["development", "production"],
     },
@@ -203,12 +266,12 @@ async function main(): Promise<void> {
     steps?: Array<{ key: string; label: string; status: string }>;
   };
   check("new run is queued", createdBody.status === "queued", createdBody.status);
-  check("all seven stages are pre-created", createdBody.steps?.length === 7, createdBody.steps);
+  check("all eight stages are pre-created", createdBody.steps?.length === 8, createdBody.steps);
   check(
     "stages start pending, in the expected order",
     createdBody.steps?.every((step) => step.status === "pending") === true &&
       createdBody.steps?.map((step) => step.key).join(",") ===
-        "queued,fetch,packages,launch,build,browse,done",
+        "queued,fetch,packages,launch,build,browse,maestro,done",
     createdBody.steps?.map((step) => step.key),
   );
   check(
@@ -260,10 +323,41 @@ async function main(): Promise<void> {
   );
 
   process.stdout.write("\n4. Full pipeline (clone + flutter pub get)\n");
+
+  check(
+    "a web build always asks for the semantics overlay",
+    dartDefineArgs("").includes("--dart-define=ENABLE_SEMANTICS=true"),
+    dartDefineArgs(""),
+  );
+  check(
+    "project defines are appended to the built-in one",
+    dartDefineArgs("A=1 B=2").join(" ") ===
+      "--dart-define=ENABLE_SEMANTICS=true --dart-define=A=1 --dart-define=B=2",
+    dartDefineArgs("A=1 B=2"),
+  );
+  check(
+    "a malformed define is dropped instead of failing the build",
+    dartDefineArgs("nonsense with space=1").join(" ") ===
+      "--dart-define=ENABLE_SEMANTICS=true --dart-define=space=1",
+    dartDefineArgs("nonsense with space=1"),
+  );
+
+  const freshSettings = (
+    await app.inject({ method: "GET", url: "/projects/103/settings", headers: auth })
+  ).json() as { orientation?: string };
+  check(
+    "a project with no saved preference defaults to horizontal",
+    freshSettings.orientation === "horizontal",
+    freshSettings,
+  );
+  const settingsNoSession = await app.inject({ method: "GET", url: "/projects/103/settings" });
+  check("project settings require a session", settingsNoSession.statusCode === 401, settingsNoSession.statusCode);
+
   let first: {
     status?: string;
     currentStep?: string;
     hasScreenshot?: boolean;
+    orientation?: string;
     steps?: Array<{ key: string; status: string; output: string | null }>;
   } = {};
   for (let i = 0; i < 240; i++) {
@@ -285,6 +379,7 @@ async function main(): Promise<void> {
   check("launch stage done", stepMap.launch?.status === "done", stepMap);
   check("build stage done", stepMap.build?.status === "done", stepMap);
   check("browse stage done", stepMap.browse?.status === "done", stepMap);
+  check("maestro stage done", stepMap.maestro?.status === "done", stepMap);
   check("done stage done", stepMap.done?.status === "done", stepMap);
 
   check(
@@ -313,9 +408,26 @@ async function main(): Promise<void> {
     (stepMap.done?.output ?? "").includes("Test passed"),
     stepMap.done?.output,
   );
+  check(
+    "maestro ran the selected flow and reported a pass",
+    (stepMap.maestro?.output ?? "").includes("1/1 passed"),
+    stepMap.maestro?.output?.slice(0, 300),
+  );
 
   process.stdout.write("\n4b. Screenshot\n");
   check("run reports it has a screenshot", first.hasScreenshot === true, first.hasScreenshot);
+
+  const workspaceFiles = await readdir(workspaceFor(String(firstRunId))).catch(() => [] as string[]);
+  check(
+    "a passing run keeps Maestro's screenshots under the success names",
+    workspaceFiles.some((name) => /^maestro-\d+\.png$/.test(name)),
+    workspaceFiles.filter((name) => name.endsWith(".png")),
+  );
+  check(
+    "a passing run has no failure screenshot",
+    !workspaceFiles.includes("maestro-failure.png"),
+    workspaceFiles.filter((name) => name.endsWith(".png")),
+  );
 
   const shot = await app.inject({
     method: "GET",
@@ -371,8 +483,121 @@ async function main(): Promise<void> {
   const list = await app.inject({ method: "GET", url: "/runs", headers: auth });
   const listed = (list.json() as { runs?: Array<{ id: string; steps: unknown[] }> }).runs ?? [];
   check("GET /runs returns both runs", listed.length === 2, listed.length);
-  check("listing includes steps for detail view", listed.every((run) => run.steps.length === 7), listed.map((r) => r.steps.length));
+  check("listing includes steps for detail view", listed.every((run) => run.steps.length === 8), listed.map((r) => r.steps.length));
   check("newest run listed first", listed[0]?.id === secondRunId, listed.map((r) => r.id));
+
+  process.stdout.write("\n7. Maestro failure\n");
+  const failing = await app.inject({
+    method: "POST",
+    url: "/runs",
+    headers: auth,
+    payload: {
+      projectId: 103,
+      projectPath: fixture.projectPath,
+      branch: "main",
+      tests: ["broken"],
+      runKinds: ["maestro"],
+      environments: ["development"],
+      orientation: "vertical",
+      dartDefines: "ENABLE_DEV_TOOLS=true",
+    },
+  });
+  const failingRunId = (failing.json() as { id?: string }).id;
+  check("failing run queued", failing.statusCode === 201, failing.statusCode);
+
+  let third: {
+    status?: string;
+    errorMessage?: string | null;
+    orientation?: string;
+    hasMaestroScreenshot?: boolean;
+    steps?: Array<{ key: string; status: string; output: string | null }>;
+  } = {};
+  for (let i = 0; i < 240; i++) {
+    const res = await app.inject({ method: "GET", url: `/runs/${failingRunId}`, headers: auth });
+    third = res.json() as typeof third;
+    if (third.status !== "running" && third.status !== "queued") break;
+    await sleep(1000);
+  }
+
+  check("a failing flow fails the run", third.status === "failed", {
+    status: third.status,
+    steps: third.steps?.map((s) => [s.key, s.status]),
+  });
+  check(
+    "maestro stage marked failed",
+    third.steps?.find((s) => s.key === "maestro")?.status === "failed",
+    third.steps,
+  );
+  check(
+    "downstream stage left pending",
+    third.steps?.find((s) => s.key === "done")?.status === "pending",
+    third.steps,
+  );
+  check(
+    "failure output quoted in the error",
+    (third.errorMessage ?? "").includes("Maestro reported failures"),
+    third.errorMessage?.slice(0, 200),
+  );
+  check(
+    "maestro failure screenshot captured",
+    third.hasMaestroScreenshot === true,
+    third.hasMaestroScreenshot,
+  );
+
+  if (third.hasMaestroScreenshot) {
+    const shotFail = await app.inject({
+      method: "GET",
+      url: `/runs/${failingRunId}/maestro-screenshot`,
+      headers: auth,
+    });
+    check("maestro screenshot is served -> 200", shotFail.statusCode === 200, shotFail.statusCode);
+    const magicFail = shotFail.rawPayload.subarray(0, 4);
+    check(
+      "maestro screenshot is a real PNG",
+      magicFail[0] === 0x89 && magicFail[1] === 0x50 && magicFail[2] === 0x4e && magicFail[3] === 0x47,
+      [...magicFail],
+    );
+  }
+
+  process.stdout.write("\n8. Orientation preference\n");
+  check(
+    "omitting orientation defaults the run to horizontal",
+    first.orientation === "horizontal",
+    first.orientation,
+  );
+  check("the run records the orientation it was started with", third.orientation === "vertical", third.orientation);
+
+  const savedSettings = (
+    await app.inject({ method: "GET", url: "/projects/103/settings", headers: auth })
+  ).json() as { orientation?: string };
+  check(
+    "starting a run saves the choice for that repository",
+    savedSettings.orientation === "vertical",
+    savedSettings,
+  );
+
+  const otherProject = (
+    await app.inject({ method: "GET", url: "/projects/104/settings", headers: auth })
+  ).json() as { orientation?: string };
+  check(
+    "the choice stays scoped to its own repository",
+    otherProject.orientation === "horizontal",
+    otherProject,
+  );
+
+  const defaultDefines = (
+    await app.inject({ method: "GET", url: "/projects/104/settings", headers: auth })
+  ).json() as { dartDefines?: string };
+  check("a project starts with no extra defines", defaultDefines.dartDefines === "", defaultDefines);
+
+  const savedDefines = (
+    await app.inject({ method: "GET", url: "/projects/103/settings", headers: auth })
+  ).json() as { dartDefines?: string };
+  check(
+    "extra defines are remembered for the repository",
+    savedDefines.dartDefines === "ENABLE_DEV_TOOLS=true",
+    savedDefines,
+  );
 
   await app.close();
   // Stop polling before the database closes, otherwise the loop spams errors.

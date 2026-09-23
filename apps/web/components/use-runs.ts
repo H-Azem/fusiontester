@@ -19,6 +19,8 @@ export type RunSummary = {
   tests: string[];
   runKinds: string[];
   environments: string[];
+  orientation: string;
+  dartDefines: string;
   status: string;
   currentStep: string;
   errorMessage: string | null;
@@ -26,6 +28,7 @@ export type RunSummary = {
   startedAt: string | null;
   finishedAt: string | null;
   hasScreenshot: boolean;
+  hasMaestroScreenshot: boolean;
   steps: RunStep[];
 };
 

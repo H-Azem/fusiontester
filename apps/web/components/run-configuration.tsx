@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type MaestroTest = {
   name: string;
@@ -11,10 +11,16 @@ type MaestroTest = {
 };
 
 type RunKind = "maestro" | "ai";
+type Orientation = "horizontal" | "vertical";
 
 const RUN_KINDS: Array<{ id: RunKind; label: string }> = [
   { id: "maestro", label: "Maestro" },
   { id: "ai", label: "AI test" },
+];
+
+const ORIENTATIONS: Array<{ id: Orientation; label: string }> = [
+  { id: "horizontal", label: "Horizontal" },
+  { id: "vertical", label: "Vertical" },
 ];
 
 export function RunConfiguration({
@@ -34,6 +40,10 @@ export function RunConfiguration({
   );
   // Development is always included, so only production is a real choice here.
   const [includeProduction, setIncludeProduction] = useState(false);
+  // Remembered per repository, so the next run opens with the same choice.
+  const [orientation, setOrientation] = useState<Orientation>("horizontal");
+  // Extra --dart-define values this app needs; also remembered per repository.
+  const [dartDefines, setDartDefines] = useState("");
   const [starting, setStarting] = useState(false);
   const [queuedRunId, setQueuedRunId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -42,6 +52,23 @@ export function RunConfiguration({
     () => tests.some((test) => test.exclusive && selectedTests.has(test.name)),
     [tests, selectedTests],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch(`/api/projects/${projectId}/settings`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { orientation?: Orientation; dartDefines?: string } | null) => {
+        if (cancelled || !data) return;
+        if (data.orientation) setOrientation(data.orientation);
+        if (typeof data.dartDefines === "string") setDartDefines(data.dartDefines);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
   function toggleTest(test: MaestroTest) {
     setSelectedTests((current) => {
@@ -94,6 +121,8 @@ export function RunConfiguration({
           environments: includeProduction
             ? ["development", "production"]
             : ["development"],
+          orientation,
+          dartDefines,
         }),
       });
 
@@ -118,6 +147,7 @@ export function RunConfiguration({
       .map((kind) => kind.label)
       .join(" + "),
     includeProduction ? "Development + Production" : "Development",
+    orientation === "horizontal" ? "Horizontal" : "Vertical",
   ].join(" · ");
 
   return (
@@ -189,6 +219,31 @@ export function RunConfiguration({
             <span>Production</span>
           </label>
         </fieldset>
+
+        <fieldset>
+          <legend>Orientation</legend>
+          {ORIENTATIONS.map((item) => (
+            <label key={item.id}>
+              <input
+                type="radio"
+                name={`orientation-${projectId}`}
+                checked={orientation === item.id}
+                onChange={() => setOrientation(item.id)}
+              />
+              <span>{item.label}</span>
+            </label>
+          ))}
+        </fieldset>
+
+        <label className="field">
+          <span>Extra build defines</span>
+          <input
+            value={dartDefines}
+            onChange={(event) => setDartDefines(event.target.value)}
+            placeholder="ENABLE_DEV_TOOLS=true"
+            spellCheck={false}
+          />
+        </label>
       </div>
 
       <div className="actions">

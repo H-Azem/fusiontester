@@ -10,6 +10,7 @@ const STEP_MARK: Record<string, string> = {
   running: "●",
   done: "✓",
   failed: "✗",
+  skipped: "–",
 };
 
 export function RunDetail({ id }: { id: string }) {
@@ -58,6 +59,16 @@ export function RunDetail({ id }: { id: string }) {
           <dt>Environment</dt>
           <dd>{run.environments.join(" + ") || "—"}</dd>
         </div>
+        <div>
+          <dt>Orientation</dt>
+          <dd>{run.orientation === "vertical" ? "Vertical" : "Horizontal"}</dd>
+        </div>
+        {run.dartDefines ? (
+          <div>
+            <dt>Build defines</dt>
+            <dd className="mono">{`ENABLE_SEMANTICS=true ${run.dartDefines}`}</dd>
+          </div>
+        ) : null}
         <div>
           <dt>Started</dt>
           <dd>{run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</dd>
@@ -108,6 +119,28 @@ export function RunDetail({ id }: { id: string }) {
             className="screenshot"
             src={`/api/runs/${run.id}/screenshot`}
             alt="The app as it appeared when it loaded"
+          />
+        </section>
+      )}
+
+      {run.hasMaestroScreenshot && (
+        <section className="panel">
+          <div className="panel-head">
+            <h2>Maestro failure</h2>
+            <a
+              href={`/api/runs/${run.id}/maestro-screenshot`}
+              target="_blank"
+              rel="noreferrer"
+              className="link"
+            >
+              Open full size
+            </a>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="screenshot"
+            src={`/api/runs/${run.id}/maestro-screenshot`}
+            alt="The app as Maestro left it when the test failed"
           />
         </section>
       )}

@@ -6,8 +6,15 @@ import { z } from "zod";
 import { currentSession, requireSession } from "../auth/require-session.js";
 import { recordAudit } from "../auth/audit.js";
 import { db } from "../db/index.js";
-import { runs } from "../db/schema.js";
-import { enqueueRun, hasScreenshot, screenshotFor, stepsFor } from "../runs/pipeline.js";
+import { runs, projectSettings } from "../db/schema.js";
+import {
+  enqueueRun,
+  hasMaestroScreenshot,
+  hasScreenshot,
+  maestroScreenshotFor,
+  screenshotFor,
+  stepsFor,
+} from "../runs/pipeline.js";
 
 const createRunSchema = z.object({
   projectId: z.number().int().positive(),
@@ -16,6 +23,8 @@ const createRunSchema = z.object({
   tests: z.array(z.string().max(300)).max(200).default([]),
   runKinds: z.array(z.enum(["maestro", "ai"])).min(1).max(2),
   environments: z.array(z.enum(["development", "production"])).min(1).max(2),
+  orientation: z.enum(["horizontal", "vertical"]).default("horizontal"),
+  dartDefines: z.string().max(2000).default(""),
 });
 
 const idParamsSchema = z.object({ id: z.string().uuid() });
@@ -29,6 +38,8 @@ function serialise(run: typeof runs.$inferSelect, steps: Awaited<ReturnType<type
     tests: run.tests,
     runKinds: run.runKinds,
     environments: run.environments,
+    orientation: run.orientation,
+    dartDefines: run.dartDefines,
     status: run.status,
     currentStep: run.currentStep,
     errorMessage: run.errorMessage,
@@ -36,6 +47,7 @@ function serialise(run: typeof runs.$inferSelect, steps: Awaited<ReturnType<type
     startedAt: run.startedAt,
     finishedAt: run.finishedAt,
     hasScreenshot: hasScreenshot(run.id),
+    hasMaestroScreenshot: hasMaestroScreenshot(run.id),
     steps: steps
       .filter((step) => step.runId === run.id)
       .map((step) => ({
@@ -57,6 +69,24 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const runId = await enqueueRun(parsed.data);
+
+    // Starting a run is also how a project remembers how it was configured, so
+    // the next run for this repository opens with the same choices selected.
+    await db
+      .insert(projectSettings)
+      .values({
+        projectId: parsed.data.projectId,
+        orientation: parsed.data.orientation,
+        dartDefines: parsed.data.dartDefines,
+      })
+      .onConflictDoUpdate({
+        target: projectSettings.projectId,
+        set: {
+          orientation: parsed.data.orientation,
+          dartDefines: parsed.data.dartDefines,
+          updatedAt: new Date(),
+        },
+      });
 
     const session = currentSession(request);
     await recordAudit({
@@ -100,6 +130,24 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
 
     return reply.type("image/png").send(createReadStream(file));
   });
+
+  app.get(
+    "/runs/:id/maestro-screenshot",
+    { preHandler: requireSession },
+    async (request, reply) => {
+      const parsed = idParamsSchema.safeParse(request.params ?? {});
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "invalid_request" });
+      }
+
+      const file = maestroScreenshotFor(parsed.data.id);
+      if (!existsSync(file)) {
+        return reply.code(404).send({ error: "not_found" });
+      }
+
+      return reply.type("image/png").send(createReadStream(file));
+    },
+  );
 
   app.get("/runs/:id", { preHandler: requireSession }, async (request, reply) => {
     const parsed = idParamsSchema.safeParse(request.params ?? {});

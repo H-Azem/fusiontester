@@ -375,7 +375,8 @@ textarea:focus {
   cursor: not-allowed;
 }
 
-input[type="checkbox"] {
+input[type="checkbox"],
+input[type="radio"] {
   width: 1rem;
   height: 1rem;
   flex: none;
@@ -436,6 +437,27 @@ input[type="checkbox"] {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+/* Extra build defines: a labelled input sitting under the option groups. */
+.run-config .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-width: 26rem;
+  margin-top: 1rem;
+}
+
+.run-config .field > span {
+  font-size: 0.8125rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.run-config .field input {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.8125rem;
 }
 
 .tag {
@@ -651,6 +673,14 @@ button[type="button"] {
 }
 
 .run-steps li.pending .mark {
+  color: var(--muted);
+}
+
+.run-steps li.skipped .mark {
+  color: var(--muted);
+}
+
+.mark.skipped {
   color: var(--muted);
 }
 

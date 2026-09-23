@@ -10,12 +10,14 @@ const STEP_MARK: Record<string, string> = {
   running: "●",
   done: "✓",
   failed: "✗",
+  skipped: "–",
 };
 
 export function statusClass(status: string): string {
   if (status === "done" || status === "passed") return "ok";
   if (status === "failed") return "fail";
   if (status === "running") return "live";
+  if (status === "skipped") return "skipped";
   return "pending";
 }
 

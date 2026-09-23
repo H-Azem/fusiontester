@@ -7,6 +7,7 @@ import { config } from "./config.js";
 import { authRoutes } from "./routes/auth.js";
 import { gitlabRoutes } from "./routes/gitlab.js";
 import { pinRoutes } from "./routes/pins.js";
+import { projectRoutes } from "./routes/projects.js";
 import { runRoutes } from "./routes/runs.js";
 import { settingsRoutes } from "./routes/settings.js";
 
@@ -43,6 +44,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(settingsRoutes);
   await app.register(gitlabRoutes);
   await app.register(pinRoutes);
+  await app.register(projectRoutes);
   await app.register(runRoutes);
 
   return app;

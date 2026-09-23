@@ -9,6 +9,11 @@ import { runSteps, runs } from "../db/schema.js";
 import { getStoredConnection, redact, type GitlabConnection } from "../gitlab/client.js";
 import { runCommand } from "./command.js";
 import { readLaunchTarget } from "./flutterProject.js";
+import {
+  prepareMaestroWorkspace,
+  resolveTestFlows,
+  runMaestro,
+} from "./maestro.js";
 import { checkAppInBrowser, findBrowserExecutable, serveDirectory } from "./webApp.js";
 
 const OUTPUT_TAIL_CHARS = 4000;
@@ -23,6 +28,7 @@ export const RUN_STAGES: RunStage[] = [
   { key: "launch", label: "Reading launch configuration…" },
   { key: "build", label: "Building the web app…" },
   { key: "browse", label: "Opening in a browser…" },
+  { key: "maestro", label: "Running Maestro tests…" },
   { key: "done", label: "Done" },
 ];
 
@@ -57,6 +63,35 @@ export function hasScreenshot(runId: string): boolean {
   return existsSync(screenshotFor(runId));
 }
 
+/** Maestro's own failure screenshot, when it captured one. */
+export function maestroScreenshotFor(runId: string): string {
+  return join(workspaceFor(runId), "maestro-failure.png");
+}
+
+export function hasMaestroScreenshot(runId: string): boolean {
+  return existsSync(maestroScreenshotFor(runId));
+}
+
+/**
+ * Maestro finds Flutter web elements through the semantics overlay, which is
+ * off unless the app asks for it. Most apps gate that call behind a compile-time
+ * flag, so every web build requests it; a project can add its own defines on top.
+ */
+const BASE_DART_DEFINES = ["ENABLE_SEMANTICS=true"];
+
+/**
+ * Builds the --dart-define arguments for a web build. Malformed entries are
+ * dropped rather than forwarded, because one bad value fails the whole build.
+ */
+export function dartDefineArgs(projectDefines: string): string[] {
+  const extra = projectDefines
+    .split(/[\s,]+/)
+    .map((entry) => entry.trim())
+    .filter((entry) => /^[A-Za-z_][A-Za-z0-9_]*=.*$/.test(entry));
+
+  return [...BASE_DART_DEFINES, ...extra].map((entry) => `--dart-define=${entry}`);
+}
+
 export async function enqueueRun(input: {
   projectId: number;
   projectPath: string;
@@ -64,6 +99,8 @@ export async function enqueueRun(input: {
   tests: string[];
   runKinds: string[];
   environments: string[];
+  orientation: string;
+  dartDefines: string;
 }): Promise<string> {
   const inserted = await db
     .insert(runs)
@@ -74,6 +111,8 @@ export async function enqueueRun(input: {
       tests: input.tests,
       runKinds: input.runKinds,
       environments: input.environments,
+      orientation: input.orientation,
+      dartDefines: input.dartDefines,
     })
     .returning({ id: runs.id });
 
@@ -196,7 +235,7 @@ export async function executeRun(runId: string): Promise<void> {
     await startStage(runId, "build");
     const build = await runCommand(
       "flutter",
-      ["build", "web", "-t", target.program],
+      ["build", "web", "-t", target.program, ...dartDefineArgs(run.dartDefines)],
       repoDir,
     );
     if (!build.ok) {
@@ -245,6 +284,67 @@ export async function executeRun(runId: string): Promise<void> {
           check.screenshot ? " Screenshot captured." : ""
         }`,
       );
+
+      // The app is only useful once it is served, so Maestro runs inside this
+      // block while the static server is still up.
+      if (run.runKinds.includes("maestro")) {
+        await startStage(runId, "maestro");
+
+        const isProduction = run.environments.includes("production");
+        const maestroRoot = await prepareMaestroWorkspace(
+          repoDir,
+          workspace,
+          server.url,
+          isProduction,
+        );
+
+        const { flows, missing } = await resolveTestFlows(maestroRoot, run.tests);
+        if (missing.length > 0) {
+          await failRun(
+            runId,
+            "maestro",
+            `No flow files found for: ${missing.join(", ")}.`,
+          );
+          return;
+        }
+        if (flows.length === 0) {
+          await failRun(runId, "maestro", "No tests were selected for this run.");
+          return;
+        }
+
+        const maestro = await runMaestro({
+          runDir: workspace,
+          workspaceDir: workspace,
+          flows,
+          appUrl: server.url,
+          artifactDir: join(workspace, "maestro-artifacts"),
+        });
+
+        const counts =
+          maestro.summary.tests !== null
+            ? `${maestro.summary.tests - (maestro.summary.failures ?? 0)}/${maestro.summary.tests} passed`
+            : "results unreadable";
+
+        if (!maestro.ok) {
+          await failRun(
+            runId,
+            "maestro",
+            `Maestro reported failures (${counts}).\n\n${maestro.output}`,
+          );
+          return;
+        }
+
+        await finishStage(
+          runId,
+          "maestro",
+          `Ran ${maestro.flows.length} flow(s): ${counts}.\n\n${maestro.output}`,
+        );
+      } else {
+        await db
+          .update(runSteps)
+          .set({ status: "skipped", output: "Skipped — Maestro was not selected." })
+          .where(and(eq(runSteps.runId, runId), eq(runSteps.key, "maestro")));
+      }
     } finally {
       await server.close();
     }
