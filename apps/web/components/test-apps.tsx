@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { BranchCheckPanel } from "./branch-check-panel";
 
@@ -63,7 +63,7 @@ export function TestApps() {
     );
   }, []);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     setBranches({});
@@ -95,7 +95,13 @@ export function TestApps() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [loadPins]);
+
+  // The repository list is the whole point of this screen, so it loads on
+  // arrival instead of waiting to be asked for.
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   async function loadBranches(projectId: number) {
     setBranchError(null);
@@ -197,9 +203,9 @@ export function TestApps() {
 
   return (
     <>
-      <div className="actions">
+      <div className="toolbar">
         <button type="button" onClick={() => void load()} disabled={loading}>
-          {loading ? "Loading…" : projects ? "Reload repositories" : "Load repositories"}
+          {loading ? "Refreshing…" : "Refresh"}
         </button>
         {projects && !loading && (
           <span className="muted">
@@ -210,6 +216,8 @@ export function TestApps() {
       </div>
 
       {error && <p className="error">{error}</p>}
+
+      {!projects && loading && <p className="muted">Loading repositories…</p>}
 
       {projects && (
         <>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 type MaestroTest = {
@@ -34,6 +35,7 @@ export function RunConfiguration({
   branch: string;
   tests: MaestroTest[];
 }) {
+  const router = useRouter();
   const [selectedTests, setSelectedTests] = useState<Set<string>>(() => new Set<string>());
   const [runKinds, setRunKinds] = useState<Set<RunKind>>(
     () => new Set<RunKind>(["maestro"]),
@@ -45,7 +47,6 @@ export function RunConfiguration({
   // Extra --dart-define values this app needs; also remembered per repository.
   const [dartDefines, setDartDefines] = useState("");
   const [starting, setStarting] = useState(false);
-  const [queuedRunId, setQueuedRunId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
 
   const exclusiveSelected = useMemo(
@@ -106,7 +107,6 @@ export function RunConfiguration({
   async function startTest() {
     setStarting(true);
     setStartError(null);
-    setQueuedRunId(null);
 
     try {
       const response = await fetch("/api/runs", {
@@ -133,7 +133,8 @@ export function RunConfiguration({
         return;
       }
 
-      setQueuedRunId(data.id);
+      // The run's progress lives on its own page, so go straight there.
+      router.push(`/runs/${data.id}`);
     } catch (err) {
       setStartError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -260,11 +261,6 @@ export function RunConfiguration({
       </div>
 
       {startError && <p className="error">{startError}</p>}
-      {queuedRunId && (
-        <p className="success">
-          Added to the queue. Watch its progress under Test runs below.
-        </p>
-      )}
     </div>
   );
 }
