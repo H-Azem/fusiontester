@@ -20,17 +20,21 @@ RUN apt-get update \
 RUN curl -fsSL -o /tmp/jdk.tar.gz \
       "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse" \
  && mkdir -p /opt/jdk \
- && tar -xzf /tmp/jdk.tar.gz -C /opt/jdk --strip-components=1 \
+ && tar --no-same-owner -xzf /tmp/jdk.tar.gz -C /opt/jdk --strip-components=1 \
  && rm /tmp/jdk.tar.gz
 ENV JAVA_HOME=/opt/jdk
 ENV PATH=/opt/jdk/bin:$PATH
 
 # --------------------------------------------------------------- Flutter ----
 # Web builds only, so the Android/Host toolchains are skipped entirely.
+# --no-same-owner matters on hosts with user quotas. Both archives carry uid
+# 1000, and chowning gigabytes of files to that uid trips its quota, which fails
+# the build with "Cannot change ownership ... Disk quota exceeded". Nothing in a
+# container needs these files owned by the archive's uid.
 ARG FLUTTER_VERSION=3.44.8
 RUN curl -fsSL -o /tmp/flutter.tar.xz \
       "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
- && tar -xf /tmp/flutter.tar.xz -C /opt \
+ && tar --no-same-owner -xf /tmp/flutter.tar.xz -C /opt \
  && rm /tmp/flutter.tar.xz \
  && git config --global --add safe.directory /opt/flutter
 ENV PATH=/opt/flutter/bin:$PATH
