@@ -15,13 +15,29 @@ export default function DashboardPage() {
   const finished = passed + failed;
 
   const cards = [
-    { label: "In flight", value: running + queued, hint: `${running} running · ${queued} queued` },
-    { label: "Passed", value: passed, hint: `of ${finished} finished` },
-    { label: "Failed", value: failed, hint: failed > 0 ? "needs attention" : "none" },
+    {
+      label: "In flight",
+      value: running + queued,
+      hint: `${running} running · ${queued} queued`,
+      tone: running + queued > 0 ? "is-live" : "",
+    },
+    {
+      label: "Passed",
+      value: passed,
+      hint: `of ${finished} finished`,
+      tone: passed > 0 ? "is-pass" : "",
+    },
+    {
+      label: "Failed",
+      value: failed,
+      hint: failed > 0 ? "needs attention" : "none",
+      tone: failed > 0 ? "is-fail" : "",
+    },
     {
       label: "Pass rate",
       value: finished > 0 ? `${Math.round((passed / finished) * 100)}%` : "—",
       hint: finished > 0 ? `${passed}/${finished}` : "no finished runs",
+      tone: "",
     },
   ];
 
@@ -31,7 +47,7 @@ export default function DashboardPage() {
 
       <div className="cards">
         {cards.map((card) => (
-          <div key={card.label} className="card">
+          <div key={card.label} className={card.tone ? `card ${card.tone}` : "card"}>
             <span className="card-label">{card.label}</span>
             <span className="card-value">{card.value}</span>
             <span className="muted card-hint">{card.hint}</span>

@@ -9,6 +9,16 @@ function svgToDataUri(svg: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+function BrandMark() {
+  return (
+    <span className="brand-mark" aria-hidden="true">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M9 1.5 3.4 9.2h3.9L6.6 14.5 12.6 6.6H8.5L9 1.5Z" />
+      </svg>
+    </span>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [captcha, setCaptcha] = useState<Captcha | null>(null);
@@ -77,78 +87,86 @@ export default function LoginPage() {
 
   if (blockedUntil) {
     return (
-      <main>
-        <h1>Fusion Tester</h1>
-        <section>
-          <h2>Access blocked</h2>
+      <main className="login-shell">
+        <div className="login-card">
+          <div className="login-brand">
+            <BrandMark />
+            <h1>Fusion Tester</h1>
+          </div>
+          <p className="subtitle">Access blocked</p>
           <p className="error">
             Too many failed attempts from your IP address. Try again after{" "}
             {new Date(blockedUntil).toLocaleString()}.
           </p>
-        </section>
+        </div>
       </main>
     );
   }
 
   return (
-    <main>
-      <h1>Fusion Tester</h1>
-      <p className="subtitle">Sign in to continue</p>
-
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="username">Username</label>
-        <input
-          id="username"
-          name="username"
-          autoComplete="username"
-          value={username}
-          onChange={(event) => setUsername(event.target.value)}
-          required
-        />
-
-        <label htmlFor="password">Password</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          required
-        />
-
-        <label htmlFor="captcha">Verification code</label>
-        <div className="captcha-row">
-          {captcha ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={svgToDataUri(captcha.svg)}
-              alt="Verification code"
-              width={180}
-              height={60}
-            />
-          ) : (
-            <div className="captcha-placeholder">Loading…</div>
-          )}
-          <button type="button" onClick={() => void loadCaptcha()}>
-            New code
-          </button>
+    <main className="login-shell">
+      <div className="login-card">
+        <div className="login-brand">
+          <BrandMark />
+          <h1>Fusion Tester</h1>
         </div>
-        <input
-          id="captcha"
-          name="captcha"
-          autoComplete="off"
-          value={captchaText}
-          onChange={(event) => setCaptchaText(event.target.value)}
-          required
-        />
+        <p className="subtitle">Sign in to continue</p>
 
-        {error && <p className="error">{error}</p>}
+        <form onSubmit={handleSubmit}>
+          <label htmlFor="username">Username</label>
+          <input
+            id="username"
+            name="username"
+            autoComplete="username"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            required
+          />
 
-        <button type="submit" disabled={submitting || !captcha}>
-          {submitting ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+
+          <label htmlFor="captcha">Verification code</label>
+          <div className="captcha-row">
+            {captcha ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={svgToDataUri(captcha.svg)}
+                alt="Verification code"
+                width={180}
+                height={60}
+              />
+            ) : (
+              <div className="captcha-placeholder">Loading…</div>
+            )}
+            <button type="button" onClick={() => void loadCaptcha()}>
+              New code
+            </button>
+          </div>
+          <input
+            id="captcha"
+            name="captcha"
+            autoComplete="off"
+            value={captchaText}
+            onChange={(event) => setCaptchaText(event.target.value)}
+            required
+          />
+
+          {error && <p className="error">{error}</p>}
+
+          <button type="submit" disabled={submitting || !captcha}>
+            {submitting ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+      </div>
     </main>
   );
 }
