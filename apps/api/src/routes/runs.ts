@@ -8,7 +8,9 @@ import { recordAudit } from "../auth/audit.js";
 import { db } from "../db/index.js";
 import { runs, projectSettings } from "../db/schema.js";
 import {
+  aiScreenshotFor,
   enqueueRun,
+  hasAiScreenshot,
   hasMaestroScreenshot,
   hasScreenshot,
   maestroScreenshotFor,
@@ -48,6 +50,7 @@ function serialise(run: typeof runs.$inferSelect, steps: Awaited<ReturnType<type
     finishedAt: run.finishedAt,
     hasScreenshot: hasScreenshot(run.id),
     hasMaestroScreenshot: hasMaestroScreenshot(run.id),
+    hasAiScreenshot: hasAiScreenshot(run.id),
     steps: steps
       .filter((step) => step.runId === run.id)
       .map((step) => ({
@@ -141,6 +144,24 @@ export async function runRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const file = maestroScreenshotFor(parsed.data.id);
+      if (!existsSync(file)) {
+        return reply.code(404).send({ error: "not_found" });
+      }
+
+      return reply.type("image/png").send(createReadStream(file));
+    },
+  );
+
+  app.get(
+    "/runs/:id/ai-screenshot",
+    { preHandler: requireSession },
+    async (request, reply) => {
+      const parsed = idParamsSchema.safeParse(request.params ?? {});
+      if (!parsed.success) {
+        return reply.code(400).send({ error: "invalid_request" });
+      }
+
+      const file = aiScreenshotFor(parsed.data.id);
       if (!existsSync(file)) {
         return reply.code(404).send({ error: "not_found" });
       }

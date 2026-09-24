@@ -114,6 +114,29 @@ export const gitlabConnections = pgTable("gitlab_connections", {
 });
 
 /**
+ * Single-row table holding the AI test credentials: an OpenAI-compatible
+ * endpoint the agent uses to choose actions, and a TypeSafe (jev) key used for
+ * structured verification. Both tokens are stored as ciphertext only, with
+ * hints so the UI can show which token is present without disclosing it.
+ */
+export const aiConnections = pgTable("ai_connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  openaiBaseUrl: text("openai_base_url").notNull(),
+  openaiModel: text("openai_model").notNull(),
+  openaiTokenCiphertext: text("openai_token_ciphertext").notNull(),
+  openaiTokenHint: text("openai_token_hint").notNull(),
+  jevBaseUrl: text("jev_base_url").notNull(),
+  jevTokenCiphertext: text("jev_token_ciphertext").notNull(),
+  jevTokenHint: text("jev_token_hint").notNull(),
+  maxSteps: integer("max_steps").notNull().default(25),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+  lastVerifyOk: boolean("last_verify_ok"),
+  lastVerifyError: text("last_verify_error"),
+});
+
+/**
  * Pinned repositories and branches. Pins are application-wide rather than
  * per-user, which matches the single-admin setup.
  */

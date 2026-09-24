@@ -29,6 +29,7 @@ export type RunSummary = {
   finishedAt: string | null;
   hasScreenshot: boolean;
   hasMaestroScreenshot: boolean;
+  hasAiScreenshot: boolean;
   steps: RunStep[];
 };
 

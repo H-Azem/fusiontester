@@ -12,6 +12,8 @@ export type AuditAction =
   | "ip.released"
   | "gitlab.connection_saved"
   | "gitlab.connection_tested"
+  | "ai.connection_saved"
+  | "ai.connection_tested"
   | "run.queued";
 
 export async function recordAudit(entry: {

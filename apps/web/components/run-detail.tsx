@@ -144,6 +144,28 @@ export function RunDetail({ id }: { id: string }) {
           />
         </section>
       )}
+
+      {run.hasAiScreenshot && (
+        <section className="panel">
+          <div className="panel-head">
+            <h2>AI failure</h2>
+            <a
+              href={`/api/runs/${run.id}/ai-screenshot`}
+              target="_blank"
+              rel="noreferrer"
+              className="link"
+            >
+              Open full size
+            </a>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="screenshot"
+            src={`/api/runs/${run.id}/ai-screenshot`}
+            alt="The app as the AI agent found it when the step failed"
+          />
+        </section>
+      )}
     </>
   );
 }

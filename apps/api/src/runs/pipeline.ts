@@ -7,6 +7,8 @@ import { config } from "../config.js";
 import { db } from "../db/index.js";
 import { runSteps, runs } from "../db/schema.js";
 import { getStoredConnection, redact, type GitlabConnection } from "../gitlab/client.js";
+import { getStoredAiConfig } from "../ai/client.js";
+import { buildAiMission, runAiTest, saveAiScreenshot } from "./aiTest.js";
 import { runCommand } from "./command.js";
 import { readLaunchTarget } from "./flutterProject.js";
 import {
@@ -29,6 +31,7 @@ export const RUN_STAGES: RunStage[] = [
   { key: "build", label: "Building the web app…" },
   { key: "browse", label: "Opening in a browser…" },
   { key: "maestro", label: "Running Maestro tests…" },
+  { key: "ai", label: "Running AI checks…" },
   { key: "done", label: "Done" },
 ];
 
@@ -70,6 +73,15 @@ export function maestroScreenshotFor(runId: string): string {
 
 export function hasMaestroScreenshot(runId: string): boolean {
   return existsSync(maestroScreenshotFor(runId));
+}
+
+/** The frame the AI agent captured when its run failed. */
+export function aiScreenshotFor(runId: string): string {
+  return join(workspaceFor(runId), "ai-failure.png");
+}
+
+export function hasAiScreenshot(runId: string): boolean {
+  return existsSync(aiScreenshotFor(runId));
 }
 
 /**
@@ -362,6 +374,69 @@ export async function executeRun(runId: string): Promise<void> {
           .update(runSteps)
           .set({ status: "skipped", output: "Skipped — Maestro was not selected." })
           .where(and(eq(runSteps.runId, runId), eq(runSteps.key, "maestro")));
+      }
+
+      if (run.runKinds.includes("ai")) {
+        await startStage(runId, "ai");
+
+        const aiConfig = await getStoredAiConfig();
+        if (!aiConfig) {
+          await failRun(
+            runId,
+            "ai",
+            "The AI connection is not configured. Add a jev token and an OpenAI-compatible endpoint in Settings.",
+          );
+          return;
+        }
+
+        // The repository's own Maestro flows double as the mission spec.
+        const mission = await buildAiMission(repoDir, run.tests);
+        const ai = await runAiTest({
+          runDir: workspace,
+          appUrl: server.url,
+          executablePath: browserPath,
+          config: aiConfig,
+          mission,
+        });
+
+        if (ai.screenshot) {
+          await writeFile(aiScreenshotFor(run.id), ai.screenshot);
+        }
+
+        const trace = ai.steps
+          .map(
+            (item) =>
+              `${item.step}. ${item.action} — ${item.detail}\n     expected: ${
+                item.expect || "(none)"
+              }\n     observed: ${item.check}`,
+          )
+          .join("\n");
+
+        if (!ai.ok) {
+          await failRun(
+            runId,
+            "ai",
+            [
+              ai.summary,
+              ai.diagnosis ? `\nDiagnosis:\n${ai.diagnosis}` : "",
+              trace ? `\nSteps:\n${trace}` : "",
+            ]
+              .filter(Boolean)
+              .join("\n"),
+          );
+          return;
+        }
+
+        await finishStage(
+          runId,
+          "ai",
+          [ai.summary, trace ? `\nSteps:\n${trace}` : ""].filter(Boolean).join("\n"),
+        );
+      } else {
+        await db
+          .update(runSteps)
+          .set({ status: "skipped", output: "Skipped — the AI check was not selected." })
+          .where(and(eq(runSteps.runId, runId), eq(runSteps.key, "ai")));
       }
     } finally {
       await server.close();

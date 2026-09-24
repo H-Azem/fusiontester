@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { AiSettings } from "@/components/ai-settings";
+
 type Config = {
   configured: boolean;
   baseUrl?: string;
@@ -36,7 +38,7 @@ type VerifyResult = {
 
 const REQUIRED_SCOPES = ["read_api", "read_repository"];
 
-export default function GitlabSettingsPage() {
+function GitlabSettings() {
   const [config, setConfig] = useState<Config | null>(null);
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
@@ -253,5 +255,14 @@ export default function GitlabSettingsPage() {
         </section>
       )}
     </section>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <>
+      <GitlabSettings />
+      <AiSettings />
+    </>
   );
 }

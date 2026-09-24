@@ -43,6 +43,13 @@
       "when": 1790194910263,
       "tag": "0005_massive_marten_broadcloak",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790206919657,
+      "tag": "0006_orange_agent_zero",
+      "breakpoints": true
     }
   ]
 }
