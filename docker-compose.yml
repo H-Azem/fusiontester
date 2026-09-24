@@ -73,7 +73,9 @@ services:
     # The dashboard is a thin Next.js server; it needs very little.
     mem_limit: 1g
     ports:
-      - "127.0.0.1:1999:1999"
+      # Host port is configurable because this is often a shared machine where
+      # 1999 is already taken by something else.
+      - "127.0.0.1:${WEB_PORT:-1999}:1999"
     depends_on:
       api:
         condition: service_healthy

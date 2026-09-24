@@ -5,7 +5,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 WORKDIR /app
-RUN corepack enable
+
+# Same pin as the API image, and for the same reason: see apps/api/Dockerfile.
+RUN npm install -g pnpm@12.5.1
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY apps/web/package.json apps/web/

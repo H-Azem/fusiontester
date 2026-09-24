@@ -52,7 +52,12 @@ ENV CHROME_PATH=/usr/bin/chromium
 
 # ------------------------------------------------------------------ app -----
 WORKDIR /app
-RUN corepack enable
+
+# Pinned rather than left to corepack's default: the lockfile is written by one
+# pnpm major, and letting the image pick whatever is current makes builds
+# irreproducible. Set as a packageManager field instead, pnpm would also record
+# it in the lockfile and --frozen-lockfile would then reject that lockfile.
+RUN npm install -g pnpm@12.5.1
 
 # Workspace manifests first, so dependency installation is cached separately
 # from source changes.
