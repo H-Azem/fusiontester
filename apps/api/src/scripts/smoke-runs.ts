@@ -29,7 +29,7 @@ import {
   users,
 } from "../db/schema.js";
 import { startRunWorker } from "../runs/worker.js";
-import { commandLine, dartDefineArgs, workspaceFor } from "../runs/pipeline.js";
+import { commandLine, dartDefineArgs, RUN_STAGES, workspaceFor } from "../runs/pipeline.js";
 import { runCommand } from "../runs/command.js";
 import { ensureDefaultAdmin } from "../seed.js";
 
@@ -266,12 +266,17 @@ async function main(): Promise<void> {
     steps?: Array<{ key: string; label: string; status: string }>;
   };
   check("new run is queued", createdBody.status === "queued", createdBody.status);
-  check("all eight stages are pre-created", createdBody.steps?.length === 8, createdBody.steps);
+  // Derived from the pipeline so adding a stage cannot silently stale this.
+  check(
+    "every stage is pre-created",
+    createdBody.steps?.length === RUN_STAGES.length,
+    createdBody.steps?.length,
+  );
   check(
     "stages start pending, in the expected order",
     createdBody.steps?.every((step) => step.status === "pending") === true &&
       createdBody.steps?.map((step) => step.key).join(",") ===
-        "queued,fetch,packages,launch,build,browse,maestro,done",
+        RUN_STAGES.map((stage) => stage.key).join(","),
     createdBody.steps?.map((step) => step.key),
   );
   check(
@@ -329,16 +334,17 @@ async function main(): Promise<void> {
     dartDefineArgs("").includes("--dart-define=ENABLE_SEMANTICS=true"),
     dartDefineArgs(""),
   );
+  // Compared against the built-in set rather than a literal list, so this keeps
+  // testing what it means to test when the built-ins change.
+  const builtIn = dartDefineArgs("").join(" ");
   check(
-    "project defines are appended to the built-in one",
-    dartDefineArgs("A=1 B=2").join(" ") ===
-      "--dart-define=ENABLE_SEMANTICS=true --dart-define=A=1 --dart-define=B=2",
+    "project defines are appended to the built-in ones",
+    dartDefineArgs("A=1 B=2").join(" ") === `${builtIn} --dart-define=A=1 --dart-define=B=2`,
     dartDefineArgs("A=1 B=2"),
   );
   check(
     "a malformed define is dropped instead of failing the build",
-    dartDefineArgs("nonsense with space=1").join(" ") ===
-      "--dart-define=ENABLE_SEMANTICS=true --dart-define=space=1",
+    dartDefineArgs("nonsense with space=1").join(" ") === `${builtIn} --dart-define=space=1`,
     dartDefineArgs("nonsense with space=1"),
   );
   check(
@@ -499,7 +505,11 @@ async function main(): Promise<void> {
   const list = await app.inject({ method: "GET", url: "/runs", headers: auth });
   const listed = (list.json() as { runs?: Array<{ id: string; steps: unknown[] }> }).runs ?? [];
   check("GET /runs returns both runs", listed.length === 2, listed.length);
-  check("listing includes steps for detail view", listed.every((run) => run.steps.length === 8), listed.map((r) => r.steps.length));
+  check(
+    "listing includes steps for detail view",
+    listed.every((run) => run.steps.length === RUN_STAGES.length),
+    listed.map((r) => r.steps.length),
+  );
   check("newest run listed first", listed[0]?.id === secondRunId, listed.map((r) => r.id));
 
   process.stdout.write("\n7. Maestro failure\n");

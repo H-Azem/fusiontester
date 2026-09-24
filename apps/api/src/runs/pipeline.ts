@@ -6,7 +6,12 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/index.js";
 import { runSteps, runs } from "../db/schema.js";
-import { getStoredConnection, redact, type GitlabConnection } from "../gitlab/client.js";
+import {
+  getStoredConnection,
+  normalizeBaseUrl,
+  redact,
+  type GitlabConnection,
+} from "../gitlab/client.js";
 import { getStoredAiConfig } from "../ai/client.js";
 import { buildAiMission, runAiTest, saveAiScreenshot } from "./aiTest.js";
 import { runCommand } from "./command.js";
@@ -192,6 +197,37 @@ async function failRun(runId: string, key: string, message: string): Promise<voi
 }
 
 /**
+ * `flutter pub get` fetches private `git:` dependencies with git itself, so they
+ * need credentials that cloning the repository never provided. Those packages
+ * almost always live on the same GitLab the repository came from, so point git
+ * at the token we already have instead of asking every project to copy it into
+ * GIT_TOKEN. GIT_HOST/GIT_TOKEN still cover any other host.
+ */
+async function authorizeGitForPubDependencies(
+  connection: GitlabConnection,
+  cwd: string,
+): Promise<void> {
+  let host: string;
+  try {
+    host = new URL(normalizeBaseUrl(connection.baseUrl)).host;
+  } catch {
+    return;
+  }
+  if (!host || !connection.token) return;
+
+  await runCommand(
+    "git",
+    [
+      "config",
+      "--global",
+      `url.https://oauth2:${connection.token}@${host}/.insteadOf`,
+      `https://${host}/`,
+    ],
+    cwd,
+  );
+}
+
+/**
  * Runs one job to completion: fetch the source, resolve packages. The Maestro
  * execution itself lands in a later step.
  */
@@ -239,12 +275,13 @@ export async function executeRun(runId: string): Promise<void> {
     await finishStage(runId, "fetch", clone.output || `Cloned ${run.branch}.`);
 
     await startStage(runId, "packages");
+    await authorizeGitForPubDependencies(connection, repoDir);
     const pubGet = await runCommand("flutter", ["pub", "get"], repoDir);
     if (!pubGet.ok) {
-      await failRun(runId, "packages", pubGet.output);
+      await failRun(runId, "packages", redact(pubGet.output, connection.token));
       return;
     }
-    await finishStage(runId, "packages", pubGet.output);
+    await finishStage(runId, "packages", redact(pubGet.output, connection.token));
 
     // The entry point comes from the repository's own launch configuration, so
     // the run matches what a developer would start locally.
