@@ -1,0 +1,76 @@
+# Two services and one public port.
+#
+#   internet -> nginx (TLS, your subdomain) -> web:1999 -> api:4000 (internal)
+#
+# The API is never published, and the web port is bound to loopback so only the
+# reverse proxy on this host can reach it.
+#
+# Create a .env file next to this compose file:
+#   APP_SECRET=<long random string>
+#   WEB_ORIGIN=https://tester.example.com
+#
+#   docker compose up -d --build
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    # init reaps the git/Flutter/Chromium children a run spawns, so a killed
+    # container cannot leave a build running.
+    init: true
+    environment:
+      NODE_ENV: production
+      # 0.0.0.0 so the web container can reach it; it is not published to the host.
+      HOST: 0.0.0.0
+      PORT: "4000"
+      # Must match the public URL exactly: login origin checks compare against it.
+      WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN in .env}
+      # Encrypts the stored GitLab and AI tokens. Losing it makes them unreadable.
+      APP_SECRET: ${APP_SECRET:?set APP_SECRET in .env}
+      TRUST_PROXY: "true"
+      PGLITE_DIR: /app/apps/api/.data/pglite
+      CHROME_PATH: /usr/bin/chromium
+    volumes:
+      # The embedded database, screenshots and every cloned repo live here.
+      - api-data:/app/apps/api/.data
+      # Cached outside the container so Maestro's Chromium and Dart packages are
+      # downloaded once rather than on every recreate.
+      - maestro-home:/root/.maestro
+      - pub-cache:/root/.pub-cache
+    # Chromium needs more shared memory than the 64MB default.
+    shm_size: "1gb"
+    # A web build peaks around 3GB and only one run happens at a time.
+    mem_limit: 6g
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        API_URL: http://api:4000
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:4000
+    ports:
+      - "127.0.0.1:1999:1999"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  api-data:
+  maestro-home:
+  pub-cache:

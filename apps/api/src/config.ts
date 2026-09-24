@@ -29,7 +29,7 @@ export const config = {
   // X-Forwarded-For blindly lets anyone spoof their IP and bypass IP blocks.
   trustProxy: bool("TRUST_PROXY", false),
 
-  webOrigin: process.env.WEB_ORIGIN ?? "http://localhost:3000",
+  webOrigin: process.env.WEB_ORIGIN ?? "http://localhost:1999",
 
   dataDir: dataRoot,
   pgliteDir: process.env.PGLITE_DIR ?? join(dataRoot, "pglite"),

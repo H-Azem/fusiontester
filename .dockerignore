@@ -1,0 +1,9 @@
+# Build output, dependencies and run workspaces must never enter the image.
+# .data alone holds every cloned repo and web build (gigabytes).
+**/node_modules
+**/.next
+**/dist
+**/.data
+**/.git
+**/*.log
+design-md
