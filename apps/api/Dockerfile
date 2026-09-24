@@ -37,7 +37,9 @@ ENV PATH=/opt/flutter/bin:$PATH
 
 # Download the Dart SDK and the web artifacts up front, so the first run does
 # not have to fetch a few hundred megabytes before it can build.
-RUN flutter config --no-analytics \
+# The flag is --disable-analytics: --no-analytics was removed from `flutter
+# config` and fails the build on 3.44.
+RUN flutter config --disable-analytics \
  && flutter precache --web \
  && flutter --version
 
@@ -60,10 +62,13 @@ COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN pnpm --filter @fusion-tester/api build
+RUN pnpm --filter @fusion-tester/api build \
+ && chmod +x apps/api/docker-entrypoint.sh
 
 EXPOSE 4000
 
+# Authenticates git for private pub dependencies, then hands over to the server.
 # node dist/server.js, never tsx watch: a watcher that reloads mid-run leaves the
 # Flutter build orphaned and burning memory.
+ENTRYPOINT ["/app/apps/api/docker-entrypoint.sh"]
 CMD ["node", "apps/api/dist/server.js"]

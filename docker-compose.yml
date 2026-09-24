@@ -32,6 +32,10 @@ services:
       TRUST_PROXY: "true"
       PGLITE_DIR: /app/apps/api/.data/pglite
       CHROME_PATH: /usr/bin/chromium
+      # Credentials for private `git:` packages in the apps you test. Without
+      # them those fetches fail at "Getting packages". See GIT_TOKEN in .env.
+      GIT_HOST: ${GIT_HOST:-}
+      GIT_TOKEN: ${GIT_TOKEN:-}
     volumes:
       # The embedded database, screenshots and every cloned repo live here.
       - api-data:/app/apps/api/.data
@@ -41,8 +45,10 @@ services:
       - pub-cache:/root/.pub-cache
     # Chromium needs more shared memory than the 64MB default.
     shm_size: "1gb"
-    # A web build peaks around 3GB and only one run happens at a time.
-    mem_limit: 6g
+    # A web build measured ~0.9GB peak and only one run happens at a time, so
+    # 3g is ample. The limit is deliberately below the whole host: on a 6GB
+    # server a container capped at 6g can still take the machine down.
+    mem_limit: 3g
     healthcheck:
       test:
         - CMD
@@ -64,6 +70,8 @@ services:
     environment:
       NODE_ENV: production
       API_URL: http://api:4000
+    # The dashboard is a thin Next.js server; it needs very little.
+    mem_limit: 1g
     ports:
       - "127.0.0.1:1999:1999"
     depends_on:
