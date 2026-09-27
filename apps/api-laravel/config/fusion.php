@@ -41,13 +41,13 @@ return [
 
     /*
      * Reading a Flutter web app's runtime needs the browser's accessibility tree
-     * over CDP, so the browse boot check and the AI lane live in the Node package
-     * and this service shells out to them. `dir` is that package's directory.
+     * over CDP, so the browse boot check and the AI lane live in the runner
+     * package and this service shells out to them. `dir` is that package.
      */
     'sidecar' => [
         'node' => env('SIDECAR_NODE', 'node'),
-        'dir' => env('SIDECAR_DIR', base_path('../api')),
-        'scripts' => env('SIDECAR_SCRIPTS', base_path('../api/src/scripts')),
+        'dir' => env('SIDECAR_DIR', base_path('../runner')),
+        'scripts' => env('SIDECAR_SCRIPTS', base_path('../runner/src/scripts')),
         'timeout_seconds' => (int) env('SIDECAR_TIMEOUT', 1200),
     ],
 ];

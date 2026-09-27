@@ -6,12 +6,14 @@ ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 WORKDIR /app
 
-# Same pin as the API image, and for the same reason: see apps/api/Dockerfile.
+# Same pin as the API image, and for the same reason: see apps/api-laravel/Dockerfile.
 RUN npm install -g pnpm@12.5.1
 
+# Both workspace members the lockfile knows about: the dashboard itself and the
+# browser runner (the Laravel app is deliberately not a pnpm member).
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
 COPY apps/web/package.json apps/web/
-COPY apps/api/package.json apps/api/
+COPY apps/runner/package.json apps/runner/
 RUN pnpm install --frozen-lockfile
 
 COPY apps/web apps/web
