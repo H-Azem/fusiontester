@@ -43,6 +43,8 @@ class ExecuteRunAction
         private GitlabClient $gitlab = new GitlabClient,
         private LaunchTargetReader $launch = new LaunchTargetReader,
         private BrowserSidecar $sidecar = new BrowserSidecar,
+        private MaestroWorkspace $maestro = new MaestroWorkspace,
+        private Directory $directories = new Directory,
     ) {}
 
     public function handle(): void
@@ -120,6 +122,14 @@ class ExecuteRunAction
     {
         $this->runs->startStage($this->run, 'fetch');
         $this->removeDirectory($workspace);
+
+        // The clone runs with the workspace as its working directory, so it has
+        // to exist first: git will not create the parent for us.
+        if (! is_dir($workspace) && ! @mkdir($workspace, 0775, true) && ! is_dir($workspace)) {
+            $this->runs->failRun($this->run, 'fetch', "Could not create the run workspace at {$workspace}.");
+
+            return;
+        }
 
         $result = $this->process(
             ['git', 'clone', '--depth', '1', '--single-branch', '--branch', (string) $this->run->getBranch(), $this->cloneUrl($connection), $repoDir],
@@ -368,24 +378,110 @@ class ExecuteRunAction
     {
         $this->runs->startStage($this->run, 'maestro');
 
-        $flows = $repoDir.'/.maestro/flows/'.($this->run->getTests()[0] ?? 'smoke').'/full_test.yaml';
-        if (! is_file($flows)) {
-            $this->runs->failRun($this->run, 'maestro', 'No Maestro flow found for the selected tests.');
+        $isProduction = in_array(Run::ENVIRONMENT_PRODUCTION, $this->run->getEnvironments() ?? [], true);
+
+        // The flows are retargeted at the served app first: a flow that still
+        // says appId makes Maestro look for a device that is not there.
+        try {
+            $root = $this->maestro->prepare($repoDir, $workspace, $url, $isProduction);
+        } catch (\Throwable $exception) {
+            $this->runs->failRun($this->run, 'maestro', $exception->getMessage());
 
             return;
         }
 
+        $resolved = $this->maestro->resolveFlows($root, $this->run->getTests() ?? []);
+
+        if ($resolved['missing'] !== []) {
+            $this->runs->failRun($this->run, 'maestro', 'No flow files found for: '.implode(', ', $resolved['missing']).'.');
+
+            return;
+        }
+
+        if ($resolved['flows'] === []) {
+            $this->runs->failRun($this->run, 'maestro', 'No tests were selected for this run.');
+
+            return;
+        }
+
+        $artifacts = $workspace.'/maestro-artifacts';
+        $report = $workspace.'/maestro-results.xml';
+        @mkdir($artifacts, 0775, true);
+
         $result = $this->process(
-            ['maestro', 'test', '--headless', '--no-ansi', '--format', 'junit', '--output', $workspace.'/maestro-results.xml', '-e', 'APP_URL='.$url, $flows],
+            array_merge(
+                ['maestro', 'test', '--headless', '--no-ansi', '--format', 'junit', '--output', $report,
+                    '--test-output-dir', $artifacts, '-e', 'APP_URL='.$url],
+                $resolved['flows']
+            ),
             $workspace,
             self::MAESTRO_TIMEOUT_SECONDS
         );
 
-        $passed = $result['ok'] && ! str_contains($result['output'], 'Failure');
+        $this->copyMaestroScreenshots($artifacts, $workspace, $result['ok']);
 
-        $passed
-            ? $this->runs->finishStage($this->run, 'maestro', $result['output'] ?: 'Maestro reported success.')
-            : $this->runs->failRun($this->run, 'maestro', $result['output']);
+        $counts = $this->maestroCounts($report);
+
+        if (! $result['ok']) {
+            $this->runs->failRun($this->run, 'maestro', "Maestro reported failures ({$counts}).\n\n".$result['output']);
+
+            return;
+        }
+
+        $this->runs->finishStage(
+            $this->run,
+            'maestro',
+            'Ran '.count($resolved['flows'])." flow(s): {$counts}.\n\n".$result['output']
+        );
+    }
+
+    /** Maestro's artifacts are what the dashboard shows when a run fails. */
+    private function copyMaestroScreenshots(string $artifacts, string $workspace, bool $passed): void
+    {
+        if (! is_dir($artifacts)) {
+            return;
+        }
+
+        $found = [];
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($artifacts, \FilesystemIterator::SKIP_DOTS)
+        );
+
+        foreach ($iterator as $file) {
+            /** @var \SplFileInfo $file */
+            if ($file->isFile() && strtolower($file->getExtension()) === 'png') {
+                $found[] = $file->getPathname();
+            }
+        }
+
+        sort($found);
+
+        foreach ($found as $index => $source) {
+            $name = $passed
+                ? 'maestro-'.($index + 1).'.png'
+                : ($index === 0 ? 'maestro-failure.png' : 'maestro-failure-'.($index + 1).'.png');
+
+            copy($source, rtrim($workspace, '/').'/'.$name);
+        }
+    }
+
+    /** The junit report is the only place the flow counts are recorded. */
+    private function maestroCounts(string $report): string
+    {
+        if (! is_file($report)) {
+            return 'results unreadable';
+        }
+
+        $xml = (string) file_get_contents($report);
+
+        if (preg_match('/\btests="(\d+)"/', $xml, $tests) !== 1) {
+            return 'results unreadable';
+        }
+
+        $failures = preg_match('/\bfailures="(\d+)"/', $xml, $failed) === 1 ? (int) $failed[1] : 0;
+        $errors = preg_match('/\berrors="(\d+)"/', $xml, $err) === 1 ? (int) $err[1] : 0;
+
+        return ((int) $tests[1] - $failures - $errors).'/'.$tests[1].' passed';
     }
 
     /** @return array<int, string> */
@@ -464,19 +560,6 @@ class ExecuteRunAction
 
     private function removeDirectory(string $path): void
     {
-        if (! is_dir($path)) {
-            return;
-        }
-
-        $items = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::CHILD_FIRST
-        );
-
-        foreach ($items as $item) {
-            $item->isDir() ? @rmdir($item->getPathname()) : @unlink($item->getPathname());
-        }
-
-        @rmdir($path);
+        $this->directories->remove($path);
     }
 }
