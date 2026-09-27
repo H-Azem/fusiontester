@@ -1,5 +1,9 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # The Laravel backend is not a Node package; without this its scaffolded
+  # package.json makes pnpm treat it as a workspace member and rewrite the
+  # lockfile with front-end dependencies this service never uses.
+  - "!apps/api-laravel"
 allowBuilds:
   esbuild: true
