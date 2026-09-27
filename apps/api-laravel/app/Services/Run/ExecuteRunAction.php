@@ -4,7 +4,9 @@ namespace App\Services\Run;
 
 use App\Models\Run;
 use App\Repositories\Run\RunRepository;
+use App\Repositories\Settings\AiConnectionRepository;
 use App\Repositories\Settings\GitlabConnectionRepository;
+use App\Http\Resources\RunArtifacts;
 use App\Services\Gitlab\GitlabClient;
 use Symfony\Component\Process\Process;
 
@@ -12,13 +14,10 @@ use Symfony\Component\Process\Process;
  * Runs one job to completion.
  *
  * The stages that shell out to real tools (git, Flutter, Maestro) are ported here
- * directly. Two stages are deliberately honest about their boundary:
- *
- *  - `browse` starts the built bundle and fetches it, which proves the static
- *    server and the bundle are intact, but it cannot detect a Dart runtime error
- *    the way a real browser can. That check lives in the Node sidecar.
- *  - `ai` likewise needs a browser to read the accessibility tree, so it is
- *    marked skipped with the reason rather than pretended.
+ * directly. The two that need a real browser — the boot check and the AI lane —
+ * are delegated to the Node sidecar, because reading a Flutter web app's runtime
+ * state means reading its accessibility tree over CDP. When the sidecar is
+ * unavailable those stages fail with that reason rather than reporting a pass.
  */
 class ExecuteRunAction
 {
@@ -40,8 +39,10 @@ class ExecuteRunAction
         private Run $run,
         private RunRepository $runs = new RunRepository,
         private GitlabConnectionRepository $connections = new GitlabConnectionRepository,
+        private AiConnectionRepository $aiConnections = new AiConnectionRepository,
         private GitlabClient $gitlab = new GitlabClient,
         private LaunchTargetReader $launch = new LaunchTargetReader,
+        private BrowserSidecar $sidecar = new BrowserSidecar,
     ) {}
 
     public function handle(): void
@@ -65,7 +66,7 @@ class ExecuteRunAction
                 return;
             }
 
-            $this->packages($repoDir);
+            $this->packages($repoDir, $connection);
             if ($this->failed()) {
                 return;
             }
@@ -93,11 +94,15 @@ class ExecuteRunAction
                 return;
             }
 
-            $this->runs->skipStage(
-                $this->run,
-                'ai',
-                'Skipped — the AI lane needs a browser to read the accessibility tree; it runs in the Node sidecar.'
-            );
+            if ($this->run->getRunKinds() !== null && in_array(Run::KIND_AI, $this->run->getRunKinds(), true)) {
+                $this->ai($workspace, $repoDir, $url);
+            } else {
+                $this->runs->skipStage($this->run, 'ai', 'Skipped — the AI check was not selected.');
+            }
+
+            if ($this->failed()) {
+                return;
+            }
 
             $this->runs->startStage($this->run, 'done');
             $this->runs->finishStage($this->run, 'done', 'Test passed.');
@@ -131,14 +136,42 @@ class ExecuteRunAction
         $this->runs->finishStage($this->run, 'fetch', $result['output'] ?: 'Cloned '.$this->run->getBranch().'.');
     }
 
-    private function packages(string $repoDir): void
+    private function packages(string $repoDir, \App\Services\Gitlab\GitlabConnectionData $connection): void
     {
         $this->runs->startStage($this->run, 'packages');
+        $this->authorizeGitForPubDependencies($connection);
+
         $result = $this->process(['flutter', 'pub', 'get'], $repoDir, self::COMMAND_TIMEOUT_SECONDS);
+        // The token is in git's global config, so it can surface in this output.
+        $output = GitlabClient::redact($result['output'], $connection->token);
 
         $result['ok']
-            ? $this->runs->finishStage($this->run, 'packages', $result['output'])
-            : $this->runs->failRun($this->run, 'packages', $result['output']);
+            ? $this->runs->finishStage($this->run, 'packages', $output)
+            : $this->runs->failRun($this->run, 'packages', $output);
+    }
+
+    /**
+     * `flutter pub get` fetches private `git:` dependencies with git itself, so
+     * they need credentials that cloning the repository never provided. Those
+     * packages almost always live on the same GitLab the repository came from,
+     * so git is pointed at the token already stored for cloning.
+     */
+    private function authorizeGitForPubDependencies(\App\Services\Gitlab\GitlabConnectionData $connection): void
+    {
+        if ($connection->token === '') {
+            return;
+        }
+
+        $host = parse_url($connection->baseUrl, PHP_URL_HOST);
+        if (! is_string($host) || $host === '') {
+            return;
+        }
+
+        $this->process([
+            'git', 'config', '--global',
+            'url.https://oauth2:'.$connection->token.'@'.$host.'/.insteadOf',
+            'https://'.$host.'/',
+        ], null, self::COMMAND_TIMEOUT_SECONDS);
     }
 
     /** @return array{name: string, program: string} */
@@ -202,17 +235,39 @@ class ExecuteRunAction
     {
         $this->runs->startStage($this->run, 'browse');
 
-        $browser = $this->findBrowser();
-        if ($browser === null && getenv('CHROME_PATH') === false) {
+        if ($this->findBrowser() === null) {
             $this->runs->failRun($this->run, 'browse', 'No Chrome or Chromium found. Set CHROME_PATH to the browser executable.');
 
             return;
         }
 
-        $body = @file_get_contents($url, false, stream_context_create(['http' => ['timeout' => 20]]));
+        $result = $this->sidecar->browse($url);
 
-        if ($body === false || ! str_contains($body, 'flutter')) {
-            $this->runs->failRun($this->run, 'browse', 'The built bundle was not served at '.$url);
+        if ($result['data'] === null) {
+            // A plain fetch would prove the bundle is served but not that the app
+            // boots, so say the check could not run instead of reporting a pass.
+            $this->runs->failRun($this->run, 'browse', 'The browser check could not run: '.$result['error']);
+
+            return;
+        }
+
+        $data = $result['data'];
+        $this->saveScreenshot($data['screenshot'] ?? null, 'screenshot.png');
+
+        $errors = is_array($data['errors'] ?? null) ? $data['errors'] : [];
+
+        if (empty($data['booted'])) {
+            $this->runs->failRun(
+                $this->run,
+                'browse',
+                $errors === [] ? 'The app never started in the browser.' : implode("\n", $errors)
+            );
+
+            return;
+        }
+
+        if (empty($data['ok'])) {
+            $this->runs->failRun($this->run, 'browse', implode("\n", $errors));
 
             return;
         }
@@ -220,9 +275,93 @@ class ExecuteRunAction
         $this->runs->finishStage(
             $this->run,
             'browse',
-            'Opened '.$url." — the bundle is served. A full in-browser boot check runs in the Node sidecar "
-            .'(it detects Dart runtime errors, which an HTTP fetch cannot).'
+            "Opened {$url} — the app started without errors.".($data['screenshot'] ? ' Screenshot captured.' : '')
         );
+    }
+
+    private function ai(string $workspace, string $repoDir, string $url): void
+    {
+        $this->runs->startStage($this->run, 'ai');
+
+        $connection = $this->aiConnections->data();
+        if ($connection === null) {
+            $this->runs->failRun(
+                $this->run,
+                'ai',
+                'The AI connection is not configured. Add a jev token and an OpenAI-compatible endpoint in Settings.'
+            );
+
+            return;
+        }
+
+        $result = $this->sidecar->runAi([
+            'url' => $url,
+            'repoDir' => $repoDir,
+            'runDir' => $workspace,
+            'tests' => $this->run->getTests() ?? [],
+            'maxSteps' => $connection->maxSteps,
+            'config' => [
+                'openaiBaseUrl' => $connection->openaiBaseUrl,
+                'openaiModel' => $connection->model,
+                'openaiToken' => $connection->openaiToken,
+                'jevBaseUrl' => $connection->jevBaseUrl,
+                'jevToken' => $connection->jevToken,
+            ],
+        ]);
+
+        if ($result['data'] === null) {
+            $this->runs->failRun($this->run, 'ai', 'The AI lane could not run: '.$result['error']);
+
+            return;
+        }
+
+        $data = $result['data'];
+        $this->saveScreenshot($data['screenshot'] ?? null, 'ai-failure.png');
+
+        $trace = '';
+        foreach ((array) ($data['steps'] ?? []) as $step) {
+            $trace .= sprintf(
+                "%s. %s — %s\n     expected: %s\n     observed: %s\n",
+                $step['step'] ?? '?',
+                $step['action'] ?? '?',
+                $step['detail'] ?? '',
+                $step['expect'] ?? '(none)',
+                $step['check'] ?? ''
+            );
+        }
+
+        if (empty($data['ok'])) {
+            $this->runs->failRun($this->run, 'ai', implode("\n", array_filter([
+                (string) ($data['summary'] ?? 'The AI lane reported a failure.'),
+                isset($data['diagnosis']) ? "\nDiagnosis:\n".$data['diagnosis'] : null,
+                $trace !== '' ? "\nSteps:\n".$trace : null,
+            ])));
+
+            return;
+        }
+
+        $this->runs->finishStage(
+            $this->run,
+            'ai',
+            implode("\n", array_filter([(string) ($data['summary'] ?? 'AI checks passed.'), $trace !== '' ? "\nSteps:\n".$trace : null]))
+        );
+    }
+
+    /** The sidecar returns base64 so the frame can travel over stdout. */
+    private function saveScreenshot(mixed $base64, string $file): void
+    {
+        if (! is_string($base64) || $base64 === '') {
+            return;
+        }
+
+        $decoded = base64_decode($base64, true);
+        if ($decoded === false) {
+            return;
+        }
+
+        $path = RunArtifacts::path((string) $this->run->getId(), $file);
+        @mkdir(dirname($path), 0775, true);
+        file_put_contents($path, $decoded);
     }
 
     private function maestro(string $workspace, string $repoDir, string $url): void
@@ -307,7 +446,7 @@ class ExecuteRunAction
         return $this->run->getStatus() === Run::STATUS_FAILED;
     }
 
-    private function process(array $command, string $cwd, int $timeout): array
+    private function process(array $command, ?string $cwd, int $timeout): array
     {
         $process = new Process($command, $cwd, null, null, $timeout);
 

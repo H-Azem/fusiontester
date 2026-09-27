@@ -38,4 +38,16 @@ return [
         'password' => env('ADMIN_PASSWORD', 'admin'),
         'role' => UserInterface::ROLE_ADMIN,
     ],
+
+    /*
+     * Reading a Flutter web app's runtime needs the browser's accessibility tree
+     * over CDP, so the browse boot check and the AI lane live in the Node package
+     * and this service shells out to them. `dir` is that package's directory.
+     */
+    'sidecar' => [
+        'node' => env('SIDECAR_NODE', 'node'),
+        'dir' => env('SIDECAR_DIR', base_path('../api')),
+        'scripts' => env('SIDECAR_SCRIPTS', base_path('../api/src/scripts')),
+        'timeout_seconds' => (int) env('SIDECAR_TIMEOUT', 1200),
+    ],
 ];
