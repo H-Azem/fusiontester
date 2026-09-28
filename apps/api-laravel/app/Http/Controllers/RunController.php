@@ -97,6 +97,7 @@ class RunController extends Controller
             return $this->legacyResponse(['error' => 'not_found'], Response::HTTP_NOT_FOUND);
         }
 
-        return ResponseFactory::file($path, 'image/png');
+        // The second argument is a header array, not a content type.
+        return ResponseFactory::file($path, ['Content-Type' => 'image/png']);
     }
 }
