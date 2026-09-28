@@ -50,6 +50,7 @@ class ExecuteRunAction
         private LaunchTargetReader $launch = new LaunchTargetReader,
         private BrowserSidecar $sidecar = new BrowserSidecar,
         private MaestroWorkspace $maestro = new MaestroWorkspace,
+        private EntrySemanticsPatcher $semantics = new EntrySemanticsPatcher,
         private Directory $directories = new Directory,
     ) {}
 
@@ -203,7 +204,13 @@ class ExecuteRunAction
             return ['name' => '', 'program' => ''];
         }
 
-        $this->runs->finishStage($this->run, 'launch', "Using \"{$target['name']}\" → {$target['program']}");
+        $patch = $this->semantics->ensure($repoDir, $target['program']);
+
+        $this->runs->finishStage(
+            $this->run,
+            'launch',
+            "Using \"{$target['name']}\" → {$target['program']}".($patch === null ? '' : "\n\n".$patch)
+        );
 
         return $target;
     }
