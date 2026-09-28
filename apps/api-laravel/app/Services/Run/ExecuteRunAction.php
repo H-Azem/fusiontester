@@ -2,6 +2,7 @@
 
 namespace App\Services\Run;
 
+use App\Models\ProjectSetting;
 use App\Models\Run;
 use App\Repositories\Run\RunRepository;
 use App\Repositories\Settings\AiConnectionRepository;
@@ -26,6 +27,11 @@ class ExecuteRunAction
     const BUILD_TIMEOUT_SECONDS = 900;
 
     const MAESTRO_TIMEOUT_SECONDS = 1200;
+
+    /** The kiosk lays itself out from the viewport it is handed, on this design canvas. */
+    const SCREEN_SIZE_VERTICAL = '1080x1920';
+
+    const SCREEN_SIZE_HORIZONTAL = '1920x1080';
 
     /** Chrome/Chromium is required to actually run the app; it is not bundled. */
     const BROWSER_CANDIDATES = [
@@ -408,10 +414,18 @@ class ExecuteRunAction
         $report = $workspace.'/maestro-results.xml';
         @mkdir($artifacts, 0775, true);
 
+        // Maestro's browser opens in a small landscape window by default, and a browser
+        // has no orientation for the app to lock — so the run's orientation is what tells
+        // the app how to lay itself out. Without this the answer cards are laid out for a
+        // viewport they were never designed for and taps land beside them.
+        $screenSize = $this->run->getOrientation() === ProjectSetting::ORIENTATION_VERTICAL
+            ? self::SCREEN_SIZE_VERTICAL
+            : self::SCREEN_SIZE_HORIZONTAL;
+
         $result = $this->process(
             array_merge(
                 ['maestro', 'test', '--headless', '--no-ansi', '--format', 'junit', '--output', $report,
-                    '--test-output-dir', $artifacts, '-e', 'APP_URL='.$url],
+                    '--test-output-dir', $artifacts, '--screen-size', $screenSize, '-e', 'APP_URL='.$url],
                 $resolved['flows']
             ),
             $workspace,
