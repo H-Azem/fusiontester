@@ -46,9 +46,10 @@ Edit `.env`:
   succeeds and then bounces straight back to the sign-in page.
 - **`APP_SECRET`** — generate with `openssl rand -base64 48`. Losing or changing
   it makes every stored GitLab token unreadable.
-- **`GIT_HOST` / `GIT_TOKEN`** — only if the apps you test declare private
-  `git:` packages in their `pubspec.yaml`. A token with `read_repository` is
-  enough. Without these, such a run fails at *Getting packages*.
+- **GitLab token** — set it in the dashboard (Settings → GitLab) rather than in
+  `.env`: the same token clones the repository and authenticates the private `git:`
+  pub packages a run fetches. A token with `read_repository` is enough; without it
+  such a run fails at *Getting packages*.
 
 ## 3. Build and start
 
@@ -162,7 +163,7 @@ Run that from cron if the server sees regular use.
 | Symptom | Cause |
 | --- | --- |
 | Login succeeds, then returns to sign-in | `WEB_ORIGIN` does not match the public URL exactly |
-| Run fails at *Getting packages* | Private `git:` pub dependencies — set `GIT_HOST`/`GIT_TOKEN` |
+| Run fails at *Getting packages* | Private `git:` pub dependencies — the GitLab token in Settings is used; make sure it can read them |
 | `403 insufficient_scope` listing projects | Token is missing `read_api` |
 | Everyone is blocked at once after failed logins | NAT: one office IP is shared, and blocks are per IP |
 | Container exits repeatedly | `docker compose logs api` — usually `APP_SECRET` unset |

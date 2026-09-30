@@ -193,10 +193,13 @@ class ExecuteRunAction
     }
 
     /**
-     * `flutter pub get` fetches private `git:` dependencies with git itself, so
-     * they need credentials that cloning the repository never provided. Those
-     * packages almost always live on the same GitLab the repository came from,
-     * so git is pointed at the token already stored for cloning.
+     * `flutter pub get` fetches private `git:` dependencies with git itself, so they
+     * need credentials that cloning the repository never provided. The token is the
+     * one stored for GitLab in Settings, written to a credential file rather than a
+     * `url.<...>.insteadOf` rewrite: the container's entrypoint used to write that
+     * same global key from its own environment, and with two entries for one host git
+     * read whichever came first — which is how a stale token kept winning over the
+     * one the dashboard was configured with.
      */
     private function authorizeGitForPubDependencies(\App\Services\Gitlab\GitlabConnectionData $connection): void
     {
@@ -209,11 +212,11 @@ class ExecuteRunAction
             return;
         }
 
-        $this->process([
-            'git', 'config', '--global',
-            'url.https://oauth2:'.$connection->token.'@'.$host.'/.insteadOf',
-            'https://'.$host.'/',
-        ], null, self::COMMAND_TIMEOUT_SECONDS);
+        $path = (getenv('HOME') ?: '/root').'/.git-credentials';
+        file_put_contents($path, 'https://oauth2:'.$connection->token.'@'.$host."\n");
+        chmod($path, 0600);
+
+        $this->process(['git', 'config', '--global', 'credential.helper', 'store'], null, self::COMMAND_TIMEOUT_SECONDS);
     }
 
     /** @return array{name: string, program: string} */

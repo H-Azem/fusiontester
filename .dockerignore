@@ -5,5 +5,6 @@
 **/dist
 **/.data
 **/.git
+**/.env
 **/*.log
 design-md

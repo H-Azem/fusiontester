@@ -33,10 +33,8 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       CHROME_PATH: /usr/bin/chromium
-      # Credentials for private `git:` packages in the apps you test. Without
-      # them those fetches fail at "Getting packages".
-      GIT_HOST: ${GIT_HOST:-}
-      GIT_TOKEN: ${GIT_TOKEN:-}
+      # Private `git:` pub packages are authenticated with the token stored in
+      # Settings (Settings → GitLab), so the pipeline carries no second copy here.
       # ---- device lane -------------------------------------------------------
       # The Android SDK stays on the host (it is several gigabytes) and is mounted
       # below; adb is referenced by path because the image's PATH is its own.
