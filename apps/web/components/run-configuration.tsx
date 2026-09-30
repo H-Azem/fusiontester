@@ -13,6 +13,7 @@ type MaestroTest = {
 
 type RunKind = "maestro" | "ai";
 type Orientation = "horizontal" | "vertical";
+type Platform = "web" | "android";
 
 const RUN_KINDS: Array<{ id: RunKind; label: string }> = [
   { id: "maestro", label: "Maestro" },
@@ -22,6 +23,13 @@ const RUN_KINDS: Array<{ id: RunKind; label: string }> = [
 const ORIENTATIONS: Array<{ id: Orientation; label: string }> = [
   { id: "horizontal", label: "Horizontal" },
   { id: "vertical", label: "Vertical" },
+];
+
+// The device lane drives the redroid container, which is what the apps were
+// written for; the web lane stays for apps that need the browser build.
+const PLATFORMS: Array<{ id: Platform; label: string; hint: string }> = [
+  { id: "web", label: "Web", hint: "browser build" },
+  { id: "android", label: "Android device", hint: "redroid" },
 ];
 
 export function RunConfiguration({
@@ -44,6 +52,10 @@ export function RunConfiguration({
   const [includeProduction, setIncludeProduction] = useState(false);
   // Remembered per repository, so the next run opens with the same choice.
   const [orientation, setOrientation] = useState<Orientation>("horizontal");
+  const [platform, setPlatform] = useState<Platform>("web");
+  // A frame of the device every couple of seconds while the run goes. Only the
+  // device lane can be watched this way, so it is off unless asked for.
+  const [live, setLive] = useState(false);
   // Extra --dart-define values this app needs; also remembered per repository.
   const [dartDefines, setDartDefines] = useState("");
   const [starting, setStarting] = useState(false);
@@ -59,9 +71,10 @@ export function RunConfiguration({
 
     fetch(`/api/projects/${projectId}/settings`, { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { orientation?: Orientation; dartDefines?: string } | null) => {
+      .then((data: { orientation?: Orientation; platform?: Platform; dartDefines?: string } | null) => {
         if (cancelled || !data) return;
         if (data.orientation) setOrientation(data.orientation);
+        if (data.platform) setPlatform(data.platform);
         if (typeof data.dartDefines === "string") setDartDefines(data.dartDefines);
       })
       .catch(() => undefined);
@@ -122,6 +135,8 @@ export function RunConfiguration({
             ? ["development", "production"]
             : ["development"],
           orientation,
+          platform,
+          live: platform === "android" && live,
           dartDefines,
         }),
       });
@@ -148,8 +163,12 @@ export function RunConfiguration({
       .map((kind) => kind.label)
       .join(" + "),
     includeProduction ? "Development + Production" : "Development",
+    PLATFORMS.find((item) => item.id === platform)?.label ?? "Web",
     orientation === "horizontal" ? "Horizontal" : "Vertical",
-  ].join(" · ");
+    platform === "android" && live ? "live view" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="run-config">
@@ -222,6 +241,22 @@ export function RunConfiguration({
         </fieldset>
 
         <fieldset>
+          <legend>Run on</legend>
+          {PLATFORMS.map((item) => (
+            <label key={item.id}>
+              <input
+                type="radio"
+                name={`platform-${projectId}`}
+                checked={platform === item.id}
+                onChange={() => setPlatform(item.id)}
+              />
+              <span>{item.label}</span>
+              <span className="muted">{item.hint}</span>
+            </label>
+          ))}
+        </fieldset>
+
+        <fieldset>
           <legend>Orientation</legend>
           {ORIENTATIONS.map((item) => (
             <label key={item.id}>
@@ -234,6 +269,20 @@ export function RunConfiguration({
               <span>{item.label}</span>
             </label>
           ))}
+        </fieldset>
+
+        <fieldset>
+          <legend>Live view</legend>
+          <label>
+            <input
+              type="checkbox"
+              checked={live}
+              disabled={platform !== "android"}
+              onChange={() => setLive((current) => !current)}
+            />
+            <span>A frame every 2.5s</span>
+          </label>
+          {platform !== "android" && <span className="muted">device lane only</span>}
         </fieldset>
 
         <label className="field">

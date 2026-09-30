@@ -25,6 +25,8 @@ class RunResource extends JsonResource
             'runKinds' => $this->getRunKinds() ?? [],
             'environments' => $this->getEnvironments() ?? [],
             'orientation' => $this->getOrientation(),
+            'platform' => $this->getPlatform(),
+            'live' => (bool) $this->getLive(),
             'dartDefines' => (string) $this->getDartDefines(),
             'status' => $this->getStatus(),
             'currentStep' => $this->getCurrentStep(),
@@ -35,6 +37,7 @@ class RunResource extends JsonResource
             'hasScreenshot' => RunArtifacts::hasScreenshot((string) $this->getId(), 'screenshot.png'),
             'hasMaestroScreenshot' => RunArtifacts::hasScreenshot((string) $this->getId(), 'maestro-failure.png'),
             'hasAiScreenshot' => RunArtifacts::hasScreenshot((string) $this->getId(), 'ai-failure.png'),
+            'hasLiveFrame' => is_file(RunArtifacts::liveFrame((string) $this->getId())),
             'steps' => RunStepResource::collection($this->whenLoaded('steps'))->resolve(),
         ];
     }

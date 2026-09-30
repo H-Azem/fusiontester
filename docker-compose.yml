@@ -37,6 +37,15 @@ services:
       # them those fetches fail at "Getting packages".
       GIT_HOST: ${GIT_HOST:-}
       GIT_TOKEN: ${GIT_TOKEN:-}
+      # ---- device lane -------------------------------------------------------
+      # The Android SDK stays on the host (it is several gigabytes) and is mounted
+      # below; adb is referenced by path because the image's PATH is its own.
+      ANDROID_HOME: /root/android-sdk
+      ANDROID_SDK_ROOT: /root/android-sdk
+      FUSION_ADB: /root/android-sdk/platform-tools/adb
+      # The redroid container publishes adb on the bridge gateway, so the worker
+      # reaches it the same way it reaches any other service.
+      FUSION_ANDROID_DEVICE: ${ANDROID_DEVICE:-172.17.0.1:5555}
     volumes:
       # The SQLite database, so a redeploy never loses runs or credentials.
       - api-data:/data
@@ -46,6 +55,8 @@ services:
       # downloaded once rather than on every recreate.
       - maestro-home:/root/.maestro
       - pub-cache:/root/.pub-cache
+      # adb, platforms, build-tools and the NDK the APK build needs.
+      - ${ANDROID_SDK_PATH:-/root/android-sdk}:/root/android-sdk
     # Chromium needs more shared memory than the 64MB default.
     shm_size: "1gb"
     # A web build measured ~0.9GB peak and one run happens at a time, so 3g is

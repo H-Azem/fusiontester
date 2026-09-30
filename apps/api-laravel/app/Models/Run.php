@@ -18,6 +18,8 @@ use Illuminate\Database\Eloquent\Model;
     self::STATUS,
     self::CURRENT_STEP,
     self::ORIENTATION,
+    self::PLATFORM,
+    self::LIVE,
     self::DART_DEFINES,
     self::ERROR_MESSAGE,
     self::CREATED_AT,
@@ -48,6 +50,10 @@ class Run extends Model implements BaseModelInterface
 
     const ORIENTATION = 'orientation';
 
+    const PLATFORM = 'platform';
+
+    const LIVE = 'live';
+
     const DART_DEFINES = 'dart_defines';
 
     const ERROR_MESSAGE = 'error_message';
@@ -70,6 +76,12 @@ class Run extends Model implements BaseModelInterface
 
     const ORIENTATION_DEFAULT = ProjectSetting::ORIENTATION_DEFAULT;
 
+    const PLATFORM_WEB = ProjectSetting::PLATFORM_WEB;
+
+    const PLATFORM_ANDROID = ProjectSetting::PLATFORM_ANDROID;
+
+    const PLATFORM_DEFAULT = ProjectSetting::PLATFORM_DEFAULT;
+
     const KIND_MAESTRO = 'maestro';
 
     const KIND_AI = 'ai';
@@ -88,6 +100,7 @@ class Run extends Model implements BaseModelInterface
             self::TESTS => 'array',
             self::RUN_KINDS => 'array',
             self::ENVIRONMENTS => 'array',
+            self::LIVE => 'boolean',
             self::CREATED_AT => 'datetime',
             self::STARTED_AT => 'datetime',
             self::FINISHED_AT => 'datetime',

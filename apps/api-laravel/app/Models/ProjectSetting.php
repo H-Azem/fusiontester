@@ -7,7 +7,7 @@ use App\Models\Contracts\BaseModelInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 
-#[Fillable([self::PROJECT_ID, self::ORIENTATION, self::DART_DEFINES])]
+#[Fillable([self::PROJECT_ID, self::ORIENTATION, self::PLATFORM, self::DART_DEFINES])]
 class ProjectSetting extends Model implements BaseModelInterface
 {
     use HasConstantGetters;
@@ -18,6 +18,8 @@ class ProjectSetting extends Model implements BaseModelInterface
 
     const ORIENTATION = 'orientation';
 
+    const PLATFORM = 'platform';
+
     const DART_DEFINES = 'dart_defines';
 
     const ORIENTATION_HORIZONTAL = 'horizontal';
@@ -25,6 +27,13 @@ class ProjectSetting extends Model implements BaseModelInterface
     const ORIENTATION_VERTICAL = 'vertical';
 
     const ORIENTATION_DEFAULT = self::ORIENTATION_HORIZONTAL;
+
+    /** The lane a run targets: the built web bundle, or an Android device. */
+    const PLATFORM_WEB = 'web';
+
+    const PLATFORM_ANDROID = 'android';
+
+    const PLATFORM_DEFAULT = self::PLATFORM_WEB;
 
     protected $table = self::TABLE;
 }

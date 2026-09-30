@@ -10,9 +10,17 @@ namespace App\Http\Resources;
  */
 class RunArtifacts
 {
+    /** The newest frame of the live view; overwritten in place as the run goes. */
+    const LIVE_FRAME = 'live.jpg';
+
     public static function workspace(string $runId): string
     {
         return storage_path('app/fusion/runs/'.$runId);
+    }
+
+    public static function liveFrame(string $runId): string
+    {
+        return self::path($runId, self::LIVE_FRAME);
     }
 
     public static function path(string $runId, string $file): string

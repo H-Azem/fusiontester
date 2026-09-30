@@ -28,6 +28,13 @@ class ExecuteRunAction
 
     const MAESTRO_TIMEOUT_SECONDS = 1200;
 
+    const INSTALL_TIMEOUT_SECONDS = 600;
+
+    const ADB_TIMEOUT_SECONDS = 120;
+
+    /** The redroid container runs x86_64; Flutter builds ARM unless asked otherwise. */
+    const ANDROID_TARGET = 'android-x64';
+
     /** The kiosk lays itself out from the viewport it is handed, on this design canvas. */
     const SCREEN_SIZE_VERTICAL = '1080x1920';
 
@@ -51,6 +58,7 @@ class ExecuteRunAction
         private BrowserSidecar $sidecar = new BrowserSidecar,
         private MaestroWorkspace $maestro = new MaestroWorkspace,
         private EntrySemanticsPatcher $semantics = new EntrySemanticsPatcher,
+        private LiveCapture $live = new LiveCapture,
         private Directory $directories = new Directory,
     ) {}
 
@@ -69,6 +77,9 @@ class ExecuteRunAction
 
         $this->runs->finishStage($this->run, 'queued', 'Started.');
 
+        $android = $this->isAndroid();
+        $url = '';
+
         try {
             $this->fetch($workspace, $repoDir, $connection);
             if ($this->failed()) {
@@ -85,28 +96,42 @@ class ExecuteRunAction
                 return;
             }
 
-            $this->build($repoDir, $target);
+            $android ? $this->buildAndroid($repoDir, $target) : $this->build($repoDir, $target);
             if ($this->failed()) {
                 return;
             }
 
-            $url = $this->serve($repoDir);
-            $this->browse($url);
-
-            if ($this->run->getRunKinds() !== null && in_array(Run::KIND_MAESTRO, $this->run->getRunKinds(), true)) {
-                $this->maestro($workspace, $repoDir, $url);
+            if ($android) {
+                $this->installOnDevice($repoDir);
             } else {
-                $this->runs->skipStage($this->run, 'maestro', 'Skipped — Maestro was not selected.');
+                $url = $this->serve($repoDir);
+                $this->browse($url);
             }
 
             if ($this->failed()) {
                 return;
             }
 
-            if ($this->run->getRunKinds() !== null && in_array(Run::KIND_AI, $this->run->getRunKinds(), true)) {
+            $kinds = $this->run->getRunKinds() ?? [];
+
+            if (! in_array(Run::KIND_MAESTRO, $kinds, true)) {
+                $this->runs->skipStage($this->run, 'maestro', 'Skipped — Maestro was not selected.');
+            } elseif ($android) {
+                $this->maestroOnDevice($workspace, $repoDir);
+            } else {
+                $this->maestro($workspace, $repoDir, $url);
+            }
+
+            if ($this->failed()) {
+                return;
+            }
+
+            if (in_array(Run::KIND_AI, $kinds, true) && ! $android) {
                 $this->ai($workspace, $repoDir, $url);
             } else {
-                $this->runs->skipStage($this->run, 'ai', 'Skipped — the AI check was not selected.');
+                $this->runs->skipStage($this->run, 'ai', $android
+                    ? 'Skipped — the AI lane reads a web app over CDP, so it runs on the web lane only.'
+                    : 'Skipped — the AI check was not selected.');
             }
 
             if ($this->failed()) {
@@ -230,6 +255,193 @@ class ExecuteRunAction
         $result['ok']
             ? $this->runs->finishStage($this->run, 'build', $commandLine."\n\n".($result['output'] ?: 'Web build succeeded.'))
             : $this->runs->failRun($this->run, 'build', $commandLine."\n\n".$result['output']);
+    }
+
+    /**
+     * The device lane builds an APK instead of a web bundle. Flutter's default is
+     * ARM-only, and the redroid container runs x86_64, so the target has to be
+     * named or the install succeeds and nothing can start.
+     */
+    private function buildAndroid(string $repoDir, array $target): void
+    {
+        $this->runs->startStage($this->run, 'build');
+
+        $args = ['flutter', 'build', 'apk', '--debug', '--target-platform', self::ANDROID_TARGET, '-t', $target['program']];
+
+        foreach ($this->extraDartDefines() as $define) {
+            $args[] = '--dart-define='.$define;
+        }
+
+        $result = $this->process($args, $repoDir, self::BUILD_TIMEOUT_SECONDS);
+        $commandLine = '$ '.implode(' ', $args);
+
+        $result['ok']
+            ? $this->runs->finishStage($this->run, 'build', $commandLine."\n\n".($result['output'] ?: 'APK built.'))
+            : $this->runs->failRun($this->run, 'build', $commandLine."\n\n".$result['output']);
+    }
+
+    /**
+     * Installs the built APK and prepares the device. This is the device lane's
+     * answer to the browse stage: it proves the app reached a real device.
+     */
+    private function installOnDevice(string $repoDir): void
+    {
+        $this->runs->startStage($this->run, 'browse');
+
+        $apk = $this->latestApk($repoDir);
+
+        if ($apk === null) {
+            $this->runs->failRun($this->run, 'browse', 'The build produced no APK to install.');
+
+            return;
+        }
+
+        $prepared = $this->prepareDevice();
+
+        $result = $this->process(
+            array_merge($this->adb(), ['install', '-r', $apk]),
+            $repoDir,
+            self::INSTALL_TIMEOUT_SECONDS
+        );
+
+        $result['ok']
+            ? $this->runs->finishStage(
+                $this->run,
+                'browse',
+                'Installed '.basename($apk).' on '.$this->device().".\n\n".$prepared
+            )
+            : $this->runs->failRun($this->run, 'browse', 'adb install failed.'."\n\n".$result['output']);
+    }
+
+    /**
+     * Android shows first-run dialogs above the app and they swallow the first tap
+     * of a flow — the immersive-mode cling cost us a whole run of debugging — so a
+     * device used for testing is told not to show them. The display follows the
+     * run's orientation, because an app that locks landscape is otherwise laid out
+     * for a portrait screen and taps land away from their targets.
+     */
+    private function prepareDevice(): string
+    {
+        $settings = [
+            ['settings', 'put', 'secure', 'immersive_mode_confirmations', 'confirmed'],
+            ['settings', 'put', 'global', 'window_animation_scale', '0'],
+            ['settings', 'put', 'global', 'transition_animation_scale', '0'],
+            ['settings', 'put', 'global', 'animator_duration_scale', '0'],
+            ['svc', 'power', 'stayon', 'true'],
+            ['wm', 'size', $this->run->getOrientation() === ProjectSetting::ORIENTATION_VERTICAL
+                ? self::SCREEN_SIZE_VERTICAL
+                : self::SCREEN_SIZE_HORIZONTAL],
+        ];
+
+        $applied = [];
+
+        foreach ($settings as $setting) {
+            $result = $this->process(array_merge($this->adb(), ['shell'], $setting), null, self::ADB_TIMEOUT_SECONDS);
+
+            if ($result['ok']) {
+                $applied[] = implode(' ', $setting);
+            }
+        }
+
+        return 'Device prepared: '.implode(', ', $applied).'.';
+    }
+
+    /**
+     * The flows run exactly as the repository wrote them — `appId:` names the app
+     * on the device — and the live view captures frames while they do.
+     */
+    private function maestroOnDevice(string $workspace, string $repoDir): void
+    {
+        $this->runs->startStage($this->run, 'maestro');
+
+        try {
+            $root = $this->maestro->prepare($repoDir, $workspace, '', false, retarget: false);
+        } catch (\Throwable $exception) {
+            $this->runs->failRun($this->run, 'maestro', $exception->getMessage());
+
+            return;
+        }
+
+        $resolved = $this->maestro->resolveFlows($root, $this->run->getTests() ?? []);
+
+        if ($resolved['missing'] !== []) {
+            $this->runs->failRun($this->run, 'maestro', 'No flow files found for: '.implode(', ', $resolved['missing']).'.');
+
+            return;
+        }
+
+        if ($resolved['flows'] === []) {
+            $this->runs->failRun($this->run, 'maestro', 'No tests were selected for this run.');
+
+            return;
+        }
+
+        $artifacts = $workspace.'/maestro-artifacts';
+        $report = $workspace.'/maestro-results.xml';
+        @mkdir($artifacts, 0775, true);
+
+        $live = $this->live->start($this->run, $workspace);
+
+        try {
+            $result = $this->process(
+                array_merge(
+                    ['maestro', 'test', '--no-ansi', '--format', 'junit', '--output', $report,
+                        '--test-output-dir', $artifacts, '--device', $this->device()],
+                    $resolved['flows']
+                ),
+                $workspace,
+                self::MAESTRO_TIMEOUT_SECONDS
+            );
+        } finally {
+            // Whatever happened, the frames stop with the stage that asked for them.
+            $this->live->stop($live, $workspace);
+        }
+
+        $this->copyMaestroScreenshots($artifacts, $workspace, $result['ok']);
+
+        $counts = $this->maestroCounts($report);
+
+        if (! $result['ok']) {
+            $this->runs->failRun($this->run, 'maestro', "Maestro reported failures ({$counts}).\n\n".$result['output']);
+
+            return;
+        }
+
+        $this->runs->finishStage(
+            $this->run,
+            'maestro',
+            'Ran '.count($resolved['flows'])." flow(s): {$counts}.\n\n".$result['output']
+        );
+    }
+
+    /** Flutter names the APK after the flavor, so the newest one is the one we built. */
+    private function latestApk(string $repoDir): ?string
+    {
+        $found = glob(rtrim($repoDir, '/').'/build/app/outputs/flutter-apk/*.apk') ?: [];
+
+        if ($found === []) {
+            return null;
+        }
+
+        usort($found, fn (string $a, string $b) => filemtime($b) <=> filemtime($a));
+
+        return $found[0];
+    }
+
+    /** @return array<int, string> */
+    private function adb(): array
+    {
+        return [(string) config('fusion.android.adb'), '-s', $this->device()];
+    }
+
+    private function device(): string
+    {
+        return (string) config('fusion.android.device');
+    }
+
+    private function isAndroid(): bool
+    {
+        return $this->run->getPlatform() === Run::PLATFORM_ANDROID;
     }
 
     /** Starts a static server for the built bundle and returns its URL. */
@@ -509,19 +721,25 @@ class ExecuteRunAction
     private function dartDefines(): array
     {
         // Semantics must be on or Maestro cannot see anything; dev tools expose
-        // the long-press test login the flows rely on.
-        $base = ['ENABLE_SEMANTICS=true', 'ENABLE_DEV_TOOLS=true'];
+        // the long-press test login the flows rely on. Both are web-lane concerns:
+        // a debug APK is already in debug mode and Android supplies the tree.
+        return array_merge(['ENABLE_SEMANTICS=true', 'ENABLE_DEV_TOOLS=true'], $this->extraDartDefines());
+    }
 
+    /** @return array<int, string> */
+    private function extraDartDefines(): array
+    {
         $extra = preg_split('/[\s,]+/', (string) $this->run->getDartDefines()) ?: [];
+        $defines = [];
 
         foreach ($extra as $entry) {
             $entry = trim($entry);
             if ($entry !== '' && preg_match('/^[A-Za-z_][A-Za-z0-9_]*=.*$/', $entry) === 1) {
-                $base[] = $entry;
+                $defines[] = $entry;
             }
         }
 
-        return $base;
+        return $defines;
     }
 
     private function cloneUrl(\App\Services\Gitlab\GitlabConnectionData $connection): string

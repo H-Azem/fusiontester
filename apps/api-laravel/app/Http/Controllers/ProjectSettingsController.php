@@ -16,6 +16,7 @@ class ProjectSettingsController extends Controller
         return $this->legacyResponse([
             'projectId' => $projectId,
             'orientation' => $row?->getOrientation() ?? ProjectSetting::ORIENTATION_DEFAULT,
+            'platform' => $row?->getPlatform() ?? ProjectSetting::PLATFORM_DEFAULT,
             'dartDefines' => (string) ($row?->getDartDefines() ?? ''),
         ]);
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { useRun } from "./use-runs";
 import { StatusBadge, statusClass } from "./runs-table";
@@ -12,6 +13,56 @@ const STEP_MARK: Record<string, string> = {
   failed: "✗",
   skipped: "–",
 };
+
+/** How often a live frame lands, matching the capture interval on the server. */
+const LIVE_REFRESH_MS = 2500;
+
+/**
+ * The device screen while a run is in flight. The frame is overwritten in place,
+ * so the query string is what forces the browser to ask for the new one; after
+ * the run ends the last frame stays put until the app repaints.
+ */
+function LiveView({ runId, running, hasFrame }: { runId: string; running: boolean; hasFrame: boolean }) {
+  const [tick, setTick] = useState(0);
+  const [missing, setMissing] = useState(false);
+
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => setTick((value) => value + 1), LIVE_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [running]);
+
+  if (!running && !hasFrame) return null;
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Live device</h2>
+        <a
+          href={`/api/runs/${runId}/live?t=${tick}`}
+          target="_blank"
+          rel="noreferrer"
+          className="link"
+        >
+          Open full size
+        </a>
+      </div>
+
+      {missing ? (
+        <p className="muted">Waiting for the first frame…</p>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className="screenshot"
+          src={`/api/runs/${runId}/live?t=${tick}`}
+          alt="The device screen as the test runs"
+          onError={() => setMissing(true)}
+          onLoad={() => setMissing(false)}
+        />
+      )}
+    </section>
+  );
+}
 
 export function RunDetail({ id }: { id: string }) {
   const { run, error, loaded } = useRun(id);
@@ -63,6 +114,13 @@ export function RunDetail({ id }: { id: string }) {
           <dt>Orientation</dt>
           <dd>{run.orientation === "vertical" ? "Vertical" : "Horizontal"}</dd>
         </div>
+        <div>
+          <dt>Runs on</dt>
+          <dd>
+            {run.platform === "android" ? "Android device" : "Web"}
+            {run.live ? " · live view" : ""}
+          </dd>
+        </div>
         {run.dartDefines ? (
           <div>
             <dt>Build defines</dt>
@@ -100,6 +158,10 @@ export function RunDetail({ id }: { id: string }) {
 
         {run.errorMessage && <p className="error">{run.errorMessage}</p>}
       </section>
+
+      {run.platform === "android" && (
+        <LiveView runId={run.id} running={run.status === "running"} hasFrame={run.hasLiveFrame} />
+      )}
 
       {run.hasScreenshot && (
         <section className="panel">

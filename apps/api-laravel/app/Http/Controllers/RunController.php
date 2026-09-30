@@ -41,6 +41,8 @@ class RunController extends Controller
             'environments' => ['required', 'array', 'min:1', 'max:2'],
             'environments.*' => ['in:development,production'],
             'orientation' => ['sometimes', 'in:horizontal,vertical'],
+            'platform' => ['sometimes', 'in:web,android'],
+            'live' => ['sometimes', 'boolean'],
             'dartDefines' => ['sometimes', 'nullable', 'string', 'max:2000'],
         ]);
 
@@ -52,6 +54,8 @@ class RunController extends Controller
             Run::RUN_KINDS => $validated['runKinds'],
             Run::ENVIRONMENTS => $validated['environments'],
             Run::ORIENTATION => $validated['orientation'] ?? ProjectSetting::ORIENTATION_DEFAULT,
+            Run::PLATFORM => $validated['platform'] ?? ProjectSetting::PLATFORM_DEFAULT,
+            Run::LIVE => $validated['live'] ?? false,
             Run::DART_DEFINES => $validated['dartDefines'] ?? '',
         ]);
 
@@ -87,6 +91,24 @@ class RunController extends Controller
     public function aiScreenshot(string $id)
     {
         return $this->serveArtifact($id, 'ai-failure.png');
+    }
+
+    /**
+     * The newest frame of the live view. It is overwritten in place while the run
+     * goes, so it must never be cached — the dashboard polls this URL.
+     */
+    public function live(string $id)
+    {
+        $path = RunArtifacts::liveFrame($id);
+
+        if (! is_file($path)) {
+            return $this->legacyResponse(['error' => 'not_found'], Response::HTTP_NOT_FOUND);
+        }
+
+        return ResponseFactory::file($path, [
+            'Content-Type' => 'image/jpeg',
+            'Cache-Control' => 'no-store, max-age=0',
+        ]);
     }
 
     private function serveArtifact(string $id, string $file)

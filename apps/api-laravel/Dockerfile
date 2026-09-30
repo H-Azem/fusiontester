@@ -10,6 +10,8 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       ca-certificates curl git unzip xz-utils procps supervisor \
       chromium fonts-liberation \
+      # The live view shrinks each device frame with ImageMagick. \
+      imagemagick \
  && rm -rf /var/lib/apt/lists/*
 
 # Fail the build loudly rather than at runtime if the base image lacks SQLite

@@ -20,7 +20,7 @@ class MaestroWorkspace
     public function __construct(private Directory $directories = new Directory) {}
 
     /** @return string the prepared workspace root */
-    public function prepare(string $repoDir, string $runDir, string $appUrl, bool $isProduction): string
+    public function prepare(string $repoDir, string $runDir, string $appUrl, bool $isProduction, bool $retarget = true): string
     {
         $source = rtrim($repoDir, '/').'/'.self::MAESTRO_DIR;
 
@@ -31,6 +31,12 @@ class MaestroWorkspace
         $target = rtrim($runDir, '/').'/'.self::MAESTRO_DIR;
         $this->directories->remove($target);
         $this->directories->copy($source, $target);
+
+        // The Android lane runs the flows exactly as the repository wrote them:
+        // `appId:` is what tells Maestro which device app to drive.
+        if (! $retarget) {
+            return $target;
+        }
 
         foreach ($this->yamlFiles($target) as $file) {
             $original = (string) file_get_contents($file);

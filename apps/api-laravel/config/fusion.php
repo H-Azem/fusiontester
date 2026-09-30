@@ -40,6 +40,18 @@ return [
     ],
 
     /*
+     * The Android lane drives a real device (the redroid container) instead of a
+     * browser build, so it needs adb and the device's address. `live` captures a
+     * frame every interval while such a run is in flight.
+     */
+    'android' => [
+        'device' => env('FUSION_ANDROID_DEVICE', '127.0.0.1:5555'),
+        'adb' => env('FUSION_ADB', 'adb'),
+        'live_interval_ms' => (int) env('FUSION_LIVE_INTERVAL_MS', 2500),
+        'live_width' => (int) env('FUSION_LIVE_WIDTH', 480),
+    ],
+
+    /*
      * Reading a Flutter web app's runtime needs the browser's accessibility tree
      * over CDP, so the browse boot check and the AI lane live in the runner
      * package and this service shells out to them. `dir` is that package.

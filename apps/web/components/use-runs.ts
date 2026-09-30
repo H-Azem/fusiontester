@@ -20,6 +20,8 @@ export type RunSummary = {
   runKinds: string[];
   environments: string[];
   orientation: string;
+  platform: string;
+  live: boolean;
   dartDefines: string;
   status: string;
   currentStep: string;
@@ -30,6 +32,7 @@ export type RunSummary = {
   hasScreenshot: boolean;
   hasMaestroScreenshot: boolean;
   hasAiScreenshot: boolean;
+  hasLiveFrame: boolean;
   steps: RunStep[];
 };
 
