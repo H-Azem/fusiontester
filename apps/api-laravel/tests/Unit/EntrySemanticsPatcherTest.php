@@ -102,6 +102,52 @@ class EntrySemanticsPatcherTest extends TestCase
         $this->assertNull($this->patcher->ensure($this->dir, 'lib/mains/nope.dart'));
     }
 
+    public function test_a_commented_out_binding_call_does_not_count(): void
+    {
+        // A release build turns a null binding into "null check operator used on a
+        // null value", so the semantics call must never open main() ahead of one.
+        $entry = $this->write(<<<'DART'
+        import 'package:kiosk/main_common.dart';
+
+        void main() {
+          final appConfig = FlavorConfig(flavor: 'develop');
+          mainCommon(appConfig);
+        }
+
+        // WidgetsFlutterBinding.ensureInitialized();
+        DART);
+
+        $this->patcher->ensure($this->dir, 'lib/mains/main_app.dart');
+
+        $this->assertTrue(
+            strpos($entry(), 'WidgetsFlutterBinding.ensureInitialized();')
+                < strpos($entry(), 'SemanticsBinding.instance.ensureSemantics();'),
+            'the binding has to be initialized before semantics are enabled'
+        );
+        $this->assertStringContainsString("import 'package:flutter/widgets.dart';", $entry());
+    }
+
+    public function test_semantics_follow_the_binding_call_the_entry_already_makes(): void
+    {
+        $entry = $this->write(<<<'DART'
+        import 'package:flutter/material.dart';
+
+        void main() async {
+          WidgetsFlutterBinding.ensureInitialized();
+          await setup();
+          mainCommon('app');
+        }
+        DART);
+
+        $this->patcher->ensure($this->dir, 'lib/mains/main_app.dart');
+
+        $this->assertSame(1, substr_count($entry(), 'ensureInitialized'));
+        $this->assertStringContainsString(
+            'WidgetsFlutterBinding.ensureInitialized();'."\n".'  SemanticsBinding.instance.ensureSemantics();',
+            $entry()
+        );
+    }
+
     /** Writes an entry and returns a reader for its current content. */
     private function write(string $source): callable
     {
