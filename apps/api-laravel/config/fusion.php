@@ -49,6 +49,13 @@ return [
         'adb' => env('FUSION_ADB', 'adb'),
         'live_interval_ms' => (int) env('FUSION_LIVE_INTERVAL_MS', 2500),
         'live_width' => (int) env('FUSION_LIVE_WIDTH', 480),
+        /*
+         * Apps ship gradle.properties written for a developer machine (-Xmx8G is
+         * common). On a shared server that gets the Gradle daemon killed mid-build
+         * ("daemon disappeared unexpectedly"), so the pipeline rewrites the heap to
+         * what this box can actually spare.
+         */
+        'gradle_heap_mb' => (int) env('FUSION_GRADLE_HEAP_MB', 1792),
     ],
 
     /*

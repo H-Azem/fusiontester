@@ -23,11 +23,16 @@ services:
       - /usr/lib/jvm/java-17-openjdk-amd64:/opt/jdk
       - /etc/java-17-openjdk:/etc/java-17-openjdk:ro
       - /etc/ssl/certs/java:/etc/ssl/certs/java:ro
+      # Gradle's downloaded dependencies are gigabytes. In the container's own layer
+      # they are invisible to `docker system df` and are lost on recreate; a named
+      # volume makes them shareable and prunable.
+      - gradle-home:/root/.gradle
 
 # Reuse the caches the previous deployment already filled: Maestro's Chromium
 # and Dart's pub cache (which holds the private packages) rather than fetching
 # them all again.
 volumes:
+  gradle-home:
   maestro-home:
     external: true
     name: fusiontester_maestro-home

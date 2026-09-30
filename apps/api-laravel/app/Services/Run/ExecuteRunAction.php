@@ -269,6 +269,8 @@ class ExecuteRunAction
     {
         $this->runs->startStage($this->run, 'build');
 
+        $this->capGradleMemory($repoDir);
+
         $args = ['flutter', 'build', 'apk', '--debug', '--target-platform', self::ANDROID_TARGET, '-t', $target['program']];
 
         foreach ($this->extraDartDefines() as $define) {
@@ -276,11 +278,47 @@ class ExecuteRunAction
         }
 
         $result = $this->process($args, $repoDir, self::BUILD_TIMEOUT_SECONDS);
+
+        // The daemon keeps its heap until told to stop, and the device test needs
+        // that memory back on a machine this small.
+        $this->process([$repoDir.'/android/gradlew', '--stop'], $repoDir.'/android', self::ADB_TIMEOUT_SECONDS);
+
         $commandLine = '$ '.implode(' ', $args);
 
         $result['ok']
             ? $this->runs->finishStage($this->run, 'build', $commandLine."\n\n".($result['output'] ?: 'APK built.'))
             : $this->runs->failRun($this->run, 'build', $commandLine."\n\n".$result['output']);
+    }
+
+    /**
+     * Apps ship a gradle.properties written for a developer machine — -Xmx8G is
+     * common — and the Gradle daemon then dies on a shared server with "daemon
+     * disappeared unexpectedly". The heap is rewritten to what this box can spare,
+     * and Jetifier is switched off: jetifying the Flutter engine jar is the build's
+     * memory peak, and it only matters for the pre-AndroidX support libraries these
+     * apps do not use.
+     */
+    private function capGradleMemory(string $repoDir): void
+    {
+        $path = rtrim($repoDir, '/').'/android/gradle.properties';
+
+        if (! is_file($path)) {
+            return;
+        }
+
+        $source = (string) file_get_contents($path);
+
+        $args = '-Xmx'.(int) config('fusion.android.gradle_heap_mb').'m -XX:MaxMetaspaceSize=512m';
+
+        $source = preg_match('/^[ \t]*org\.gradle\.jvmargs\s*=.*$/m', $source) === 1
+            ? (string) preg_replace('/^[ \t]*org\.gradle\.jvmargs\s*=.*$/m', 'org.gradle.jvmargs='.$args, $source, 1)
+            : rtrim($source, "\n")."\norg.gradle.jvmargs=".$args."\n";
+
+        $source = preg_match('/^[ \t]*android\.enableJetifier\s*=/m', $source) === 1
+            ? (string) preg_replace('/^[ \t]*android\.enableJetifier\s*=.*$/m', 'android.enableJetifier=false', $source, 1)
+            : $source;
+
+        file_put_contents($path, $source);
     }
 
     /**
