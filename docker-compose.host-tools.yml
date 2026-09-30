@@ -1,0 +1,30 @@
+# Deployment for a host that already carries the toolchain.
+#
+# The image is self-contained by default (~6GB: a second Flutter, JDK and
+# Maestro). On this machine all of that is already installed and its caches
+# already hold the private `git:` packages the apps need, so this override mounts
+# them instead — the image stays around 2GB, which matters on a server that also
+# stores its own images.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.host-tools.yml up -d --build
+#
+# The Android SDK mount lives in the base file; this adds what a web build needs.
+services:
+  api:
+    build:
+      args:
+        HOST_TOOLCHAIN: "1"
+    volumes:
+      - /root/flutter:/opt/flutter
+      - /usr/lib/jvm/java-17-openjdk-amd64:/opt/jdk
+
+# Reuse the caches the previous deployment already filled: Maestro's Chromium
+# and Dart's pub cache (which holds the private packages) rather than fetching
+# them all again.
+volumes:
+  maestro-home:
+    external: true
+    name: fusiontester_maestro-home
+  pub-cache:
+    external: true
+    name: fusiontester_pub-cache

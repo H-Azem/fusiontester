@@ -20,36 +20,51 @@ RUN php -m | grep -q pdo_sqlite
 
 # -------------------------------------------------------------------- Node ----
 # Only the runner needs it, so it comes from the official image rather than a
-# second runtime being installed by hand.
+# second runtime being installed by hand. npm is a symlink into the copied
+# node_modules, so the links are recreated explicitly — copying bin/ alone leaves
+# `npm` missing and the runner install fails with 127.
 COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+ && ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+ && node --version && npm --version
 
 # ---------------------------------------------------------------- Composer ----
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # ---------------------------------------------------------------- JDK 21 ------
-# Maestro is a JVM tool; a JDK is not optional.
-RUN curl -fsSL -o /tmp/jdk.tar.gz \
-      "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse" \
- && mkdir -p /opt/jdk \
- && tar -xzf /tmp/jdk.tar.gz -C /opt/jdk --strip-components=1 \
- && rm /tmp/jdk.tar.gz
+# Maestro is a JVM tool; a JDK is not optional. A host that already has one can
+# mount it at /opt/jdk and set HOST_TOOLCHAIN=1 instead of baking a second copy.
+ARG HOST_TOOLCHAIN=0
+RUN if [ "$HOST_TOOLCHAIN" != "1" ]; then \
+      curl -fsSL -o /tmp/jdk.tar.gz \
+        "https://api.adoptium.net/v3/binary/latest/21/ga/linux/x64/jdk/hotspot/normal/eclipse" \
+      && mkdir -p /opt/jdk \
+      && tar -xzf /tmp/jdk.tar.gz -C /opt/jdk --strip-components=1 \
+      && rm /tmp/jdk.tar.gz; \
+    fi
 ENV JAVA_HOME=/opt/jdk
 ENV PATH=/opt/jdk/bin:$PATH
 
 # --------------------------------------------------------------- Flutter ------
-# Web builds only, so the Android and desktop toolchains are skipped.
+# Web builds and APKs, so the full SDK is needed; the desktop toolchains are not.
 ARG FLUTTER_VERSION=3.44.8
-RUN curl -fsSL -o /tmp/flutter.tar.xz \
-      "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
- && tar -xf /tmp/flutter.tar.xz -C /opt \
- && rm /tmp/flutter.tar.xz \
- && git config --global --add safe.directory /opt/flutter
+RUN if [ "$HOST_TOOLCHAIN" != "1" ]; then \
+      curl -fsSL -o /tmp/flutter.tar.xz \
+        "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz" \
+      && tar -xf /tmp/flutter.tar.xz -C /opt \
+      && rm /tmp/flutter.tar.xz \
+      && git config --global --add safe.directory /opt/flutter; \
+    fi
 ENV PATH=/opt/flutter/bin:$PATH
-RUN flutter config --no-analytics && flutter precache --web && flutter --version
+RUN if [ "$HOST_TOOLCHAIN" != "1" ]; then \
+      flutter config --no-analytics && flutter precache --web && flutter --version; \
+    fi
 
 # --------------------------------------------------------------- Maestro ------
-RUN curl -fsSL https://get.maestro.mobile.dev | bash
+RUN if [ "$HOST_TOOLCHAIN" != "1" ]; then \
+      curl -fsSL https://get.maestro.mobile.dev | bash; \
+    fi
 ENV PATH=/root/.maestro/bin:$PATH
 
 # puppeteer-core is given no browser of its own, so point it at the packaged one.
@@ -90,4 +105,9 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 EXPOSE 4000
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
-CMD ["supervisord", "-c", "/etc/supervisor/conf.d/fusion.conf"]
+
+# The copied file is a fragment for conf.d (programs only), so supervisor is
+# pointed at the distribution's main config, which includes that directory. -n
+# keeps it in the foreground; that config daemonises by default, which would make
+# the container's main process exit immediately.
+CMD ["supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
