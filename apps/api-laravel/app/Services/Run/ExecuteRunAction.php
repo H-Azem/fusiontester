@@ -361,7 +361,6 @@ class ExecuteRunAction
         // Wake the device the build put to sleep, then wait for Android to answer
         // before anything is installed on it.
         $this->power->wake();
-        $this->connectDevice();
 
         if (! $this->waitForDevice()) {
             $this->runs->failRun(
@@ -529,17 +528,25 @@ class ExecuteRunAction
         );
     }
 
-    /** Waits for Android to finish booting — a resumed container takes ~30s. */
+    /**
+     * Waits for Android to finish booting — a resumed container takes ~30s and its
+     * adbd only accepts a connection once it is up, so connect is retried here
+     * rather than attempted once before the device is ready.
+     */
     private function waitForDevice(): bool
     {
         for ($attempt = 0; $attempt < 30; $attempt++) {
+            $this->connectDevice();
+
             $result = $this->process(
                 array_merge($this->adb(), ['shell', 'getprop', 'sys.boot_completed']),
                 null,
                 self::ADB_TIMEOUT_SECONDS
             );
 
-            if (trim($result['output']) === '1') {
+            // The first call also prints adb's own "daemon started" banner, so match
+            // the line itself rather than the whole output.
+            if (preg_match('/^\s*1\s*$/m', $result['output']) === 1) {
                 return true;
             }
 
