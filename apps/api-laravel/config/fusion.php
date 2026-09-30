@@ -9,6 +9,13 @@ return [
      */
     'web_origin' => env('WEB_ORIGIN', 'http://localhost:1999'),
 
+    /*
+     * A run's workspace holds its clone and build output (~1.6GB) next to the
+     * screenshots and reports the dashboard serves (kilobytes). The heavy half is
+     * removed when the run ends; set this to keep it while debugging a pipeline.
+     */
+    'keep_workspace' => (bool) env('FUSION_KEEP_WORKSPACE', false),
+
     'session' => [
         'cookie' => 'ft_session',
         'ttl_hours' => (int) env('SESSION_TTL_HOURS', 12),
@@ -56,6 +63,13 @@ return [
          * what this box can actually spare.
          */
         'gradle_heap_mb' => (int) env('FUSION_GRADLE_HEAP_MB', 1792),
+        /*
+         * Where the pipeline leaves the "pause"/"resume" flags the host-side watcher
+         * acts on, stopping the device for the build and starting it for the test.
+         * Nothing here touches Docker: the API container is given no socket access.
+         */
+        'control_dir' => env('FUSION_CONTROL_DIR', '/control'),
+        'sleep_for_build' => (bool) env('FUSION_SLEEP_DEVICE_FOR_BUILD', true),
     ],
 
     /*

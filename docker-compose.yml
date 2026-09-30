@@ -55,6 +55,9 @@ services:
       - pub-cache:/root/.pub-cache
       # adb, platforms, build-tools and the NDK the APK build needs.
       - ${ANDROID_SDK_PATH:-/root/android-sdk}:/root/android-sdk
+      # The pipeline leaves "pause"/"resume" flags here for the host watcher that
+      # stops the device for a build; the container itself gets no Docker socket.
+      - ${FUSION_CONTROL_PATH:-/srv/fusion-control}:/control
     # apps/api-laravel/docker/supervisord.conf is a conf.d fragment, so supervisor
     # is started from the main config that includes it. -n keeps it in the
     # foreground: the distribution config daemonises by default, which would make

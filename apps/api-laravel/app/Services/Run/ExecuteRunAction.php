@@ -59,6 +59,7 @@ class ExecuteRunAction
         private MaestroWorkspace $maestro = new MaestroWorkspace,
         private EntrySemanticsPatcher $semantics = new EntrySemanticsPatcher,
         private LiveCapture $live = new LiveCapture,
+        private DevicePower $power = new DevicePower,
         private Directory $directories = new Directory,
     ) {}
 
@@ -147,6 +148,13 @@ class ExecuteRunAction
                 (string) $this->run->getCurrentStep(),
                 GitlabClient::redact($exception->getMessage(), $connection->token)
             );
+        } finally {
+            // The clone and its build output are ~1.6GB per run, while the screenshots
+            // and reports the dashboard serves after it are kilobytes. Keeping the
+            // source would fill the disk within a week.
+            if (! (bool) config('fusion.keep_workspace')) {
+                $this->removeDirectory($repoDir);
+            }
         }
     }
 
@@ -269,6 +277,12 @@ class ExecuteRunAction
     {
         $this->runs->startStage($this->run, 'build');
 
+        // The device holds roughly what the build needs, and nothing is testing it
+        // yet: the host watcher stops it now and the install stage wakes it again.
+        if ((bool) config('fusion.android.sleep_for_build')) {
+            $this->power->sleep();
+        }
+
         $this->capGradleMemory($repoDir);
 
         $args = ['flutter', 'build', 'apk', '--debug', '--target-platform', self::ANDROID_TARGET, '-t', $target['program']];
@@ -328,6 +342,21 @@ class ExecuteRunAction
     private function installOnDevice(string $repoDir): void
     {
         $this->runs->startStage($this->run, 'browse');
+
+        // Wake the device the build put to sleep, then wait for Android to answer
+        // before anything is installed on it.
+        $this->power->wake();
+        $this->connectDevice();
+
+        if (! $this->waitForDevice()) {
+            $this->runs->failRun(
+                $this->run,
+                'browse',
+                'The device did not come back after the build: '.$this->device().' never reported boot_completed.'
+            );
+
+            return;
+        }
 
         $apk = $this->latestApk($repoDir);
 
@@ -473,6 +502,36 @@ class ExecuteRunAction
     private function adb(): array
     {
         return [(string) config('fusion.android.adb'), '-s', $this->device()];
+    }
+
+    /** adb holds one connection per device, and a resumed container needs a new one. */
+    private function connectDevice(): void
+    {
+        $this->process(
+            [(string) config('fusion.android.adb'), 'connect', $this->device()],
+            null,
+            self::ADB_TIMEOUT_SECONDS
+        );
+    }
+
+    /** Waits for Android to finish booting — a resumed container takes ~30s. */
+    private function waitForDevice(): bool
+    {
+        for ($attempt = 0; $attempt < 30; $attempt++) {
+            $result = $this->process(
+                array_merge($this->adb(), ['shell', 'getprop', 'sys.boot_completed']),
+                null,
+                self::ADB_TIMEOUT_SECONDS
+            );
+
+            if (trim($result['output']) === '1') {
+                return true;
+            }
+
+            sleep(4);
+        }
+
+        return false;
     }
 
     private function device(): string
