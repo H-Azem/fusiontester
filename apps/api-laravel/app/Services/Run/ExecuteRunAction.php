@@ -287,6 +287,15 @@ class ExecuteRunAction
 
         $args = ['flutter', 'build', 'apk', '--debug', '--target-platform', self::ANDROID_TARGET, '-t', $target['program']];
 
+        // Without an explicit flavor Gradle packages every variant of the debug
+        // build, so a run aimed at `main_develop.dart` also spends minutes (and
+        // risks failing) on the production flavor it will never install.
+        $flavor = $this->flavorFor((string) $target['program']);
+
+        if ($flavor !== null) {
+            array_push($args, '--flavor', $flavor);
+        }
+
         foreach ($this->extraDartDefines() as $define) {
             $args[] = '--dart-define='.$define;
         }
@@ -302,6 +311,12 @@ class ExecuteRunAction
         $result['ok']
             ? $this->runs->finishStage($this->run, 'build', $commandLine."\n\n".($result['output'] ?: 'APK built.'))
             : $this->runs->failRun($this->run, 'build', $commandLine."\n\n".$result['output']);
+    }
+
+    /** "lib/mains/main_develop.dart" is the `develop` flavor; "main.dart" is none. */
+    private function flavorFor(string $program): ?string
+    {
+        return preg_match('#/main_([A-Za-z0-9_]+)\.dart$#', $program, $matches) === 1 ? $matches[1] : null;
     }
 
     /**
