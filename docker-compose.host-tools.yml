@@ -16,7 +16,13 @@ services:
         HOST_TOOLCHAIN: "1"
     volumes:
       - /root/flutter:/opt/flutter
+      # Ubuntu's JDK is not self-contained: conf/security/java.security and
+      # lib/security/cacerts are symlinks into /etc. Mounting the JDK alone leaves
+      # both dangling, and every JVM start fails with "Error loading java.security
+      # file" or an empty truststore.
       - /usr/lib/jvm/java-17-openjdk-amd64:/opt/jdk
+      - /etc/java-17-openjdk:/etc/java-17-openjdk:ro
+      - /etc/ssl/certs/java:/etc/ssl/certs/java:ro
 
 # Reuse the caches the previous deployment already filled: Maestro's Chromium
 # and Dart's pub cache (which holds the private packages) rather than fetching
