@@ -31,6 +31,13 @@ function LiveView({ runId, running, hasFrame }: { runId: string; running: boolea
     return () => clearInterval(timer);
   }, [running]);
 
+  // The first frame arrives well after the page does, and the image has to stay
+  // mounted for onLoad to ever fire: hiding it behind the placeholder is what made
+  // this sit on "Waiting for the first frame" forever.
+  useEffect(() => {
+    if (hasFrame) setMissing(false);
+  }, [hasFrame]);
+
   if (!running && !hasFrame) return null;
 
   return (
@@ -56,23 +63,17 @@ function LiveView({ runId, running, hasFrame }: { runId: string; running: boolea
         </span>
       </div>
 
-      {missing ? (
-        <div className="live-frame pending">Waiting for the first frame…</div>
-      ) : (
-        // eslint-disable-next-line @next/next/no-img-element
+      <div className="frame-box">
+        {missing && <div className="live-frame pending">Waiting for the first frame…</div>}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          className="live-frame"
+          className={missing ? "live-frame is-hidden" : "live-frame"}
           src={`/api/runs/${runId}/live?t=${tick}`}
-          alt="The device screen as the test runs"
+          alt="Device screen"
           onError={() => setMissing(true)}
           onLoad={() => setMissing(false)}
         />
-      )}
-
-      <p className="md-body-sm muted">
-        A frame every {LIVE_REFRESH_MS / 1000} seconds, captured from the emulator as it is
-        driven. The device sleeps while the app builds, so frames start when the test does.
-      </p>
+      </div>
     </section>
   );
 }
@@ -98,7 +99,9 @@ function ScreenshotPanel({
         </a>
       </div>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="live-frame" src={`/api/runs/${runId}/${kind}`} alt={note} />
+      <div className="frame-box">
+        <img className="live-frame" src={`/api/runs/${runId}/${kind}`} alt="Screenshot" />
+      </div>
       <p className="md-body-sm muted">{note}</p>
     </section>
   );

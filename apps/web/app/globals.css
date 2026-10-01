@@ -1788,20 +1788,43 @@ details.disclosure > .output {
   color: var(--on-surface-variant);
 }
 
-.live-frame {
-  width: 100%;
-  border-radius: var(--shape-md);
+/* A phone screenshot at full width is taller than the window, so frames are boxed
+   and scaled to fit the viewport; "Full size" opens the original. */
+.frame-box {
+  display: grid;
+  place-items: center;
+  padding: var(--space-2);
+  min-height: 120px;
   border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-md);
   background: var(--surface-container-lowest);
+}
+
+.live-frame {
   display: block;
+  max-width: 100%;
+  max-height: 60vh;
+  width: auto;
+  height: auto;
+  border-radius: var(--shape-sm);
+  background: var(--surface-container-lowest);
+}
+
+/* Kept mounted while the first frame is missing: an image that is not in the DOM
+   cannot report that it loaded. */
+.live-frame.is-hidden {
+  display: none;
 }
 
 .live-frame.pending {
+  width: 100%;
   aspect-ratio: 16 / 9;
+  max-height: none;
   display: grid;
   place-items: center;
   color: var(--on-surface-faint);
   font-size: 13px;
+  background: transparent;
 }
 
 /* ========================================================== login ========= */
