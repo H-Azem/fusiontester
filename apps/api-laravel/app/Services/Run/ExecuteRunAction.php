@@ -9,6 +9,7 @@ use App\Repositories\Settings\AiConnectionRepository;
 use App\Repositories\Settings\GitlabConnectionRepository;
 use App\Http\Resources\RunArtifacts;
 use App\Services\Gitlab\GitlabClient;
+use App\Services\Telegram\TelegramNotifier;
 use Symfony\Component\Process\Process;
 
 /**
@@ -60,6 +61,7 @@ class ExecuteRunAction
         private EntrySemanticsPatcher $semantics = new EntrySemanticsPatcher,
         private LiveCapture $live = new LiveCapture,
         private DevicePower $power = new DevicePower,
+        private TelegramNotifier $telegram = new TelegramNotifier,
         private Directory $directories = new Directory,
     ) {}
 
@@ -149,6 +151,14 @@ class ExecuteRunAction
                 GitlabClient::redact($exception->getMessage(), $connection->token)
             );
         } finally {
+            // One message per finished run, wherever it got to. Sent before the
+            // workspace goes, so a failure has its screenshots to point at.
+            try {
+                $this->telegram->report($this->run->refresh());
+            } catch (\Throwable) {
+                // A notification is a courtesy; it must never change a run's outcome.
+            }
+
             // The clone and its build output are ~1.6GB per run, while the screenshots
             // and reports the dashboard serves after it are kilobytes. Keeping the
             // source would fill the disk within a week.

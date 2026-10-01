@@ -10,6 +10,7 @@ use App\Http\Controllers\ProjectSettingsController;
 use App\Http\Controllers\RunController;
 use App\Http\Controllers\Settings\AiSettingsController;
 use App\Http\Controllers\Settings\GitlabSettingsController;
+use App\Http\Controllers\Settings\TelegramSettingsController;
 use Illuminate\Support\Facades\Route;
 
 // Public: the login flow itself, plus the health probe the container checks.
@@ -36,6 +37,10 @@ Route::middleware('auth.session')->group(function () {
         Route::get('settings/ai', [AiSettingsController::class, 'show']);
         Route::put('settings/ai', [AiSettingsController::class, 'update']);
         Route::post('settings/ai/test', [AiSettingsController::class, 'test']);
+
+        Route::get('settings/telegram', [TelegramSettingsController::class, 'show']);
+        Route::put('settings/telegram', [TelegramSettingsController::class, 'update']);
+        Route::post('settings/telegram/test', [TelegramSettingsController::class, 'test']);
     });
 
     Route::get('gitlab/projects', [GitlabController::class, 'projects']);
