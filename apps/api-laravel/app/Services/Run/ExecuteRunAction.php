@@ -159,6 +159,13 @@ class ExecuteRunAction
                 // A notification is a courtesy; it must never change a run's outcome.
             }
 
+            // The app stays on the device otherwise, and no run ever looks at it again.
+            try {
+                $this->removeInstalledApps($repoDir);
+            } catch (\Throwable) {
+                // Tidying up must never change a run's outcome.
+            }
+
             // The clone and its build output are ~1.6GB per run, while the screenshots
             // and reports the dashboard serves after it are kilobytes. Keeping the
             // source would fill the disk within a week.
@@ -442,6 +449,73 @@ class ExecuteRunAction
     }
 
     /**
+     * Android names the package it refused to replace: "Existing package com.x.y
+     * signatures do not match newer version". Reading it from the output keeps the
+     * pipeline from having to guess an application id out of the Gradle files.
+     */
+    public static function clashingPackage(string $output): ?string
+    {
+        if (preg_match('/Existing package ([A-Za-z][A-Za-z0-9_.]*)/', $output, $matches) === 1) {
+            return $matches[1];
+        }
+
+        if (preg_match('/INSTALL_FAILED_UPDATE_INCOMPATIBLE[^\n]*?([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.]+)/', $output, $matches) === 1) {
+            return $matches[1];
+        }
+
+        return null;
+    }
+
+    /** Packages that did not ship with Android: the apps this device exists for. */
+    private function installedPackages(string $repoDir): array
+    {
+        $result = $this->process(
+            array_merge($this->adb(), ['shell', 'pm', 'list', 'packages', '-3']),
+            $repoDir,
+            self::INSTALL_TIMEOUT_SECONDS
+        );
+
+        if (! $result['ok']) {
+            return [];
+        }
+
+        $packages = [];
+
+        foreach (preg_split('/\R/', $result['output']) ?: [] as $line) {
+            $line = trim($line);
+
+            if (! str_starts_with($line, 'package:')) {
+                continue;
+            }
+
+            $name = trim(substr($line, strlen('package:')));
+
+            if (preg_match('/^[A-Za-z][A-Za-z0-9_.]*$/', $name) === 1) {
+                $packages[] = $name;
+            }
+        }
+
+        return array_unique($packages);
+    }
+
+    /**
+     * The device keeps everything earlier runs installed. Removing it after every run,
+     * passing or failing, is what stops the disk filling with installations nobody
+     * looks at — and it means the next run starts from a clean device instead of
+     * meeting an older build's signature.
+     */
+    private function removeInstalledApps(string $repoDir): void
+    {
+        foreach ($this->installedPackages($repoDir) as $package) {
+            $this->process(
+                array_merge($this->adb(), ['uninstall', $package]),
+                $repoDir,
+                self::INSTALL_TIMEOUT_SECONDS
+            );
+        }
+    }
+
+    /**
      * Installs the built APK and prepares the device. This is the device lane's
      * answer to the browse stage: it proves the app reached a real device.
      */
@@ -473,11 +547,25 @@ class ExecuteRunAction
 
         $prepared = $this->prepareDevice();
 
-        $result = $this->process(
-            array_merge($this->adb(), ['install', '-r', $apk]),
-            $repoDir,
-            self::INSTALL_TIMEOUT_SECONDS
-        );
+        $install = array_merge($this->adb(), ['install', '-r', $apk]);
+
+        $result = $this->process($install, $repoDir, self::INSTALL_TIMEOUT_SECONDS);
+
+        // An earlier run left this app behind, built with another key. Android refuses
+        // to replace it and names the package, so that one is removed and the install
+        // is tried again rather than failing the run over stale state.
+        $clashing = $result['ok'] ? null : self::clashingPackage($result['output']);
+
+        if ($clashing !== null) {
+            $this->process(
+                array_merge($this->adb(), ['uninstall', $clashing]),
+                $repoDir,
+                self::INSTALL_TIMEOUT_SECONDS
+            );
+
+            $result = $this->process($install, $repoDir, self::INSTALL_TIMEOUT_SECONDS);
+            $prepared .= "\nRemoved the older ".$clashing." that was still installed.";
+        }
 
         $result['ok']
             ? $this->runs->finishStage(
