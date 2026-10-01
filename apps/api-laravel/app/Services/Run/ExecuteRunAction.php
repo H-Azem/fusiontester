@@ -625,7 +625,7 @@ class ExecuteRunAction
             return;
         }
 
-        $requested = $this->maestro->withSmokeFirst($root, $this->run->getTests() ?? []);
+        $requested = $this->maestro->withSmokeFirst($this->run->getTests() ?? []);
         $resolved = $this->maestro->resolveFlows($root, $requested);
         $smokeNote = count($requested) > count($this->run->getTests() ?? [])
             ? "\nSmoke ran first, so the app was signed in before the selected tests."
@@ -920,7 +920,7 @@ class ExecuteRunAction
             return;
         }
 
-        $requested = $this->maestro->withSmokeFirst($root, $this->run->getTests() ?? []);
+        $requested = $this->maestro->withSmokeFirst($this->run->getTests() ?? []);
         $resolved = $this->maestro->resolveFlows($root, $requested);
         $smokeNote = count($requested) > count($this->run->getTests() ?? [])
             ? "\nSmoke ran first, so the app was signed in before the selected tests."

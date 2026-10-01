@@ -2,6 +2,8 @@
 
 namespace App\Services\Run;
 
+use App\Services\Gitlab\FlutterInspector;
+
 /**
  * Prepares the repository's Maestro workspace for a web run.
  *
@@ -54,31 +56,28 @@ class MaestroWorkspace
     }
 
     /**
-     * `full_test.yaml` is the repository convention for a folder's entry point;
-     * otherwise every flow directly inside the folder is used.
-     *
-     * @param array<int, string> $tests
-     * @return array{flows: array<int, string>, missing: array<int, string>}
-     */
-    /**
      * Every application carries a `smoke` flow that signs in and reaches its home
      * screen. A run that names other flows needs that sign-in to happen first, so
-     * smoke is put in front of them; picking nothing means every flow (smoke
-     * included) and picking a whole-suite test covers it by itself.
+     * smoke is put in front of them.
+     *
+     * Two selections are left alone: nothing at all, which still means every flow and
+     * so already includes smoke, and the whole-application suite, which covers the
+     * sign-in itself. Plenty of ordinary test folders also keep a flow called
+     * `full_test.yaml` — that file is simply the flow the folder runs — so the suite is
+     * recognised by its folder name, the same way the test list recognises it, and
+     * never by the file inside.
      *
      * @param  array<int, string>  $tests  the flow folders the run asked for
      * @return array<int, string>
      */
-    public function withSmokeFirst(string $maestroRoot, array $tests): array
+    public function withSmokeFirst(array $tests): array
     {
         if ($tests === []) {
             return $tests;
         }
 
-        $root = rtrim($maestroRoot, '/').'/'.self::FLOWS_DIR;
-
         foreach ($tests as $test) {
-            if (is_file($root.'/'.$test.'/full_test.yaml')) {
+            if (in_array($test, FlutterInspector::EXCLUSIVE_TEST_FOLDERS, true)) {
                 return $tests;
             }
         }
@@ -91,6 +90,13 @@ class MaestroWorkspace
         return array_merge([self::SMOKE_FLOW], $rest);
     }
 
+    /**
+     * `full_test.yaml` is the repository convention for a folder's entry point;
+     * otherwise every flow directly inside the folder is used.
+     *
+     * @param array<int, string> $tests
+     * @return array{flows: array<int, string>, missing: array<int, string>}
+     */
     public function resolveFlows(string $maestroRoot, array $tests): array
     {
         $flows = [];
