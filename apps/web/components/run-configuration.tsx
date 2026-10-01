@@ -45,13 +45,11 @@ export function RunConfiguration({
   projectPath,
   branch,
   tests,
-  hasWebFolder = false,
 }: {
   projectId: number;
   projectPath: string;
   branch: string;
   tests: MaestroTest[];
-  hasWebFolder?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -89,10 +87,11 @@ export function RunConfiguration({
         ) => {
           if (cancelled || !data) return;
           if (data.orientation) setOrientation(data.orientation);
-          // An app without a web folder can only run on a device, so that is the
-          // default until someone chooses otherwise for this repository.
+          // The apps under test are built for Android and the device lane is the one
+          // that drives them the way they were written, so it is the default until
+          // someone chooses otherwise for this repository.
           if (data.platformSet && data.platform) setPlatform(data.platform);
-          else setPlatform(hasWebFolder ? "web" : "android");
+          else setPlatform("android");
           if (typeof data.dartDefines === "string") setDartDefines(data.dartDefines);
         },
       )
@@ -101,7 +100,7 @@ export function RunConfiguration({
     return () => {
       cancelled = true;
     };
-  }, [projectId, hasWebFolder]);
+  }, [projectId]);
 
   /** Remember a choice for the next run; a failure here must not block the form. */
   function remember(values: { orientation?: Orientation; platform?: Platform }) {
