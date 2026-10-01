@@ -5,10 +5,12 @@ use App\Http\Controllers\Auth\CaptchaController;
 use App\Http\Controllers\Auth\SettingsPasswordController;
 use App\Http\Controllers\GitlabController;
 use App\Http\Controllers\HealthController;
+use App\Http\Controllers\Hooks\GitlabWebhookController;
 use App\Http\Controllers\PinController;
 use App\Http\Controllers\ProjectSettingsController;
 use App\Http\Controllers\RunController;
 use App\Http\Controllers\Settings\AiSettingsController;
+use App\Http\Controllers\Settings\AutomationTriggerController;
 use App\Http\Controllers\Settings\GitlabSettingsController;
 use App\Http\Controllers\Settings\TelegramSettingsController;
 use Illuminate\Support\Facades\Route;
@@ -18,6 +20,9 @@ Route::get('health', HealthController::class);
 Route::get('auth/captcha', [CaptchaController::class, 'show']);
 Route::post('auth/login', [AuthController::class, 'login']);
 Route::post('auth/logout', [AuthController::class, 'logout']);
+
+// Public by design: GitLab has no session, it carries the rule's own token.
+Route::post('hooks/gitlab/{token}', GitlabWebhookController::class);
 
 Route::middleware('auth.session')->group(function () {
     Route::get('auth/me', [AuthController::class, 'me']);
@@ -37,6 +42,11 @@ Route::middleware('auth.session')->group(function () {
         Route::get('settings/ai', [AiSettingsController::class, 'show']);
         Route::put('settings/ai', [AiSettingsController::class, 'update']);
         Route::post('settings/ai/test', [AiSettingsController::class, 'test']);
+
+        Route::get('automation/triggers', [AutomationTriggerController::class, 'index']);
+        Route::post('automation/triggers', [AutomationTriggerController::class, 'store']);
+        Route::patch('automation/triggers/{id}', [AutomationTriggerController::class, 'update'])->whereNumber('id');
+        Route::delete('automation/triggers/{id}', [AutomationTriggerController::class, 'destroy'])->whereNumber('id');
 
         Route::get('settings/telegram', [TelegramSettingsController::class, 'show']);
         Route::put('settings/telegram', [TelegramSettingsController::class, 'update']);
