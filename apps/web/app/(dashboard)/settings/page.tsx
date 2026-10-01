@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { AiSettings } from "@/components/ai-settings";
+import { SettingsGate, SettingsPasswordCard } from "@/components/settings-gate";
 import { Icon } from "@/components/icons";
 import { StatusChip, relativeTime } from "@/components/status";
 
@@ -295,9 +296,12 @@ function GitlabSettings() {
 
 export default function SettingsPage() {
   return (
-    <div className="stack">
-      <GitlabSettings />
-      <AiSettings />
-    </div>
+    <SettingsGate>
+      <div className="stack">
+        <GitlabSettings />
+        <AiSettings />
+        <SettingsPasswordCard />
+      </div>
+    </SettingsGate>
   );
 }

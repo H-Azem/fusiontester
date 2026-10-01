@@ -10,6 +10,9 @@ interface UserInterface extends BaseModelInterface
 
     const PASSWORD_HASH = 'password_hash';
 
+    /** A second password, asked for before Settings will open. */
+    const SETTINGS_PASSWORD_HASH = 'settings_password_hash';
+
     const ROLE = 'role';
 
     const PASSWORD_CHANGED_AT = 'password_changed_at';

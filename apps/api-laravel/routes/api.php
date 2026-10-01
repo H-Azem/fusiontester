@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Auth\CaptchaController;
+use App\Http\Controllers\Auth\SettingsPasswordController;
 use App\Http\Controllers\GitlabController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\PinController;
@@ -21,13 +22,21 @@ Route::middleware('auth.session')->group(function () {
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::post('auth/change-password', [AuthController::class, 'changePassword']);
 
-    Route::get('settings/gitlab', [GitlabSettingsController::class, 'show']);
-    Route::put('settings/gitlab', [GitlabSettingsController::class, 'update']);
-    Route::post('settings/gitlab/test', [GitlabSettingsController::class, 'test']);
+    // The settings password: asked for once per sign-in, before Settings opens.
+    Route::get('auth/settings-status', [SettingsPasswordController::class, 'status']);
+    Route::post('auth/settings-unlock', [SettingsPasswordController::class, 'unlock']);
+    Route::post('auth/settings-password', [SettingsPasswordController::class, 'change']);
 
-    Route::get('settings/ai', [AiSettingsController::class, 'show']);
-    Route::put('settings/ai', [AiSettingsController::class, 'update']);
-    Route::post('settings/ai/test', [AiSettingsController::class, 'test']);
+    // Everything that holds a credential sits behind that second password.
+    Route::middleware('settings.unlocked')->group(function () {
+        Route::get('settings/gitlab', [GitlabSettingsController::class, 'show']);
+        Route::put('settings/gitlab', [GitlabSettingsController::class, 'update']);
+        Route::post('settings/gitlab/test', [GitlabSettingsController::class, 'test']);
+
+        Route::get('settings/ai', [AiSettingsController::class, 'show']);
+        Route::put('settings/ai', [AiSettingsController::class, 'update']);
+        Route::post('settings/ai/test', [AiSettingsController::class, 'test']);
+    });
 
     Route::get('gitlab/projects', [GitlabController::class, 'projects']);
     Route::get('gitlab/projects/{projectId}/branches', [GitlabController::class, 'branches'])

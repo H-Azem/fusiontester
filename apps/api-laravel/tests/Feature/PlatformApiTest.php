@@ -31,6 +31,7 @@ class PlatformApiTest extends TestCase
     public function gitlab_settings_round_trip_without_ever_returning_the_token(): void
     {
         $token = $this->loginToken();
+        $this->unlockSettings($token);
 
         $this->asSession($token)
             ->getJson('/settings/gitlab')
@@ -55,6 +56,7 @@ class PlatformApiTest extends TestCase
     public function saving_gitlab_settings_requires_a_token_the_first_time(): void
     {
         $token = $this->loginToken();
+        $this->unlockSettings($token);
 
         $this->asSession($token)
             ->putJson('/settings/gitlab', ['baseUrl' => 'https://git.example.com'])
@@ -66,6 +68,7 @@ class PlatformApiTest extends TestCase
     public function ai_settings_show_defaults_and_save_both_credentials(): void
     {
         $token = $this->loginToken();
+        $this->unlockSettings($token);
 
         $this->asSession($token)
             ->getJson('/settings/ai')
@@ -92,6 +95,7 @@ class PlatformApiTest extends TestCase
     public function pins_are_listed_upserted_and_removed(): void
     {
         $token = $this->loginToken();
+        $this->unlockSettings($token);
 
         $this->asSession($token)->getJson('/pins')->assertSuccessful()->assertJsonCount(0, 'pins');
 
@@ -126,6 +130,7 @@ class PlatformApiTest extends TestCase
     public function a_branch_pin_without_a_branch_is_rejected(): void
     {
         $token = $this->loginToken();
+        $this->unlockSettings($token);
 
         $this->asSession($token)->putJson('/pins', [
             'kind' => Pin::KIND_BRANCH,
@@ -138,6 +143,7 @@ class PlatformApiTest extends TestCase
     public function project_settings_fall_back_to_the_default_orientation(): void
     {
         $token = $this->loginToken();
+        $this->unlockSettings($token);
 
         $this->asSession($token)
             ->getJson('/projects/33/settings')
@@ -152,6 +158,7 @@ class PlatformApiTest extends TestCase
     {
         Queue::fake();
         $token = $this->loginToken();
+        $this->unlockSettings($token);
 
         $response = $this->asSession($token)->postJson('/runs', [
             'projectId' => 33,
@@ -182,6 +189,7 @@ class PlatformApiTest extends TestCase
     {
         Queue::fake();
         $token = $this->loginToken();
+        $this->unlockSettings($token);
 
         $this->asSession($token)->postJson('/runs', [
             'projectId' => 1, 'projectPath' => 'a/one', 'branch' => 'main',
@@ -208,6 +216,7 @@ class PlatformApiTest extends TestCase
     public function loading_repositories_without_a_connection_answers_conflict(): void
     {
         $token = $this->loginToken();
+        $this->unlockSettings($token);
 
         $this->asSession($token)
             ->getJson('/gitlab/projects')

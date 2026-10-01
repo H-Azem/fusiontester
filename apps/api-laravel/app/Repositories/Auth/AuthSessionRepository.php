@@ -39,6 +39,13 @@ class AuthSessionRepository
         $session->save();
     }
 
+    /** Settings stay open for the rest of this sign-in, not for every request. */
+    public function unlockSettings(AuthSession $session): void
+    {
+        $session->setAttribute(AuthSession::SETTINGS_UNLOCKED_AT, now());
+        $session->save();
+    }
+
     public function revoke(AuthSession $session): void
     {
         $session->setAttribute(AuthSession::REVOKED_AT, now());

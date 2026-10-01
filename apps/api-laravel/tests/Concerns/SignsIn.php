@@ -43,4 +43,17 @@ trait SignsIn
         return $this->withCredentials()
             ->withUnencryptedCookie((string) config('fusion.session.cookie'), $token);
     }
+
+    /**
+     * Opens Settings for this session with the placeholder password config carries,
+     * because every credential route sits behind it.
+     */
+    protected function unlockSettings(string $token): void
+    {
+        $this->asSession($token)
+            ->postJson('/auth/settings-unlock', [
+                'password' => (string) config('fusion.admin.settings_password'),
+            ])
+            ->assertSuccessful();
+    }
 }

@@ -29,6 +29,9 @@ class AuthSession extends Model implements BaseModelInterface
 
     const REVOKED_AT = 'revoked_at';
 
+    /** Set when the person entered the settings password during this session. */
+    const SETTINGS_UNLOCKED_AT = 'settings_unlocked_at';
+
     protected $table = self::TABLE;
 
     public $timestamps = false;
