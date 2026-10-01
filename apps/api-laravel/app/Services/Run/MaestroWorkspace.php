@@ -17,6 +17,9 @@ class MaestroWorkspace
 
     const FLOWS_DIR = 'flows';
 
+    /** The flow that signs in; it runs before any other flow the run names. */
+    const SMOKE_FLOW = 'smoke';
+
     public function __construct(private Directory $directories = new Directory) {}
 
     /** @return string the prepared workspace root */
@@ -57,6 +60,37 @@ class MaestroWorkspace
      * @param array<int, string> $tests
      * @return array{flows: array<int, string>, missing: array<int, string>}
      */
+    /**
+     * Every application carries a `smoke` flow that signs in and reaches its home
+     * screen. A run that names other flows needs that sign-in to happen first, so
+     * smoke is put in front of them; picking nothing means every flow (smoke
+     * included) and picking a whole-suite test covers it by itself.
+     *
+     * @param  array<int, string>  $tests  the flow folders the run asked for
+     * @return array<int, string>
+     */
+    public function withSmokeFirst(string $maestroRoot, array $tests): array
+    {
+        if ($tests === []) {
+            return $tests;
+        }
+
+        $root = rtrim($maestroRoot, '/').'/'.self::FLOWS_DIR;
+
+        foreach ($tests as $test) {
+            if (is_file($root.'/'.$test.'/full_test.yaml')) {
+                return $tests;
+            }
+        }
+
+        $rest = array_values(array_filter(
+            $tests,
+            fn ($test) => strcasecmp((string) $test, self::SMOKE_FLOW) !== 0
+        ));
+
+        return array_merge([self::SMOKE_FLOW], $rest);
+    }
+
     public function resolveFlows(string $maestroRoot, array $tests): array
     {
         $flows = [];

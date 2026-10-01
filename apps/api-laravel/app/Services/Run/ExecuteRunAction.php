@@ -537,7 +537,11 @@ class ExecuteRunAction
             return;
         }
 
-        $resolved = $this->maestro->resolveFlows($root, $this->run->getTests() ?? []);
+        $requested = $this->maestro->withSmokeFirst($root, $this->run->getTests() ?? []);
+        $resolved = $this->maestro->resolveFlows($root, $requested);
+        $smokeNote = count($requested) > count($this->run->getTests() ?? [])
+            ? "\nSmoke ran first, so the app was signed in before the selected tests."
+            : '';
 
         if ($resolved['missing'] !== []) {
             $this->runs->failRun($this->run, 'maestro', 'No flow files found for: '.implode(', ', $resolved['missing']).'.');
@@ -585,7 +589,7 @@ class ExecuteRunAction
         $this->runs->finishStage(
             $this->run,
             'maestro',
-            'Ran '.count($resolved['flows'])." flow(s): {$counts}.\n\n".$result['output']
+            'Ran '.count($resolved['flows'])." flow(s): {$counts}.".$smokeNote."\n\n".$result['output']
         );
     }
 
@@ -828,7 +832,11 @@ class ExecuteRunAction
             return;
         }
 
-        $resolved = $this->maestro->resolveFlows($root, $this->run->getTests() ?? []);
+        $requested = $this->maestro->withSmokeFirst($root, $this->run->getTests() ?? []);
+        $resolved = $this->maestro->resolveFlows($root, $requested);
+        $smokeNote = count($requested) > count($this->run->getTests() ?? [])
+            ? "\nSmoke ran first, so the app was signed in before the selected tests."
+            : '';
 
         if ($resolved['missing'] !== []) {
             $this->runs->failRun($this->run, 'maestro', 'No flow files found for: '.implode(', ', $resolved['missing']).'.');
@@ -877,7 +885,7 @@ class ExecuteRunAction
         $this->runs->finishStage(
             $this->run,
             'maestro',
-            'Ran '.count($resolved['flows'])." flow(s): {$counts}.\n\n".$result['output']
+            'Ran '.count($resolved['flows'])." flow(s): {$counts}.".$smokeNote."\n\n".$result['output']
         );
     }
 
