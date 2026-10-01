@@ -620,40 +620,6 @@ body {
   font-size: 13px;
 }
 
-/* ------------------------------------------------------------------ fab ---- */
-
-.fab {
-  position: fixed;
-  inset-inline-end: var(--space-5);
-  bottom: calc(var(--nav-bar-height) + env(safe-area-inset-bottom, 0px) + var(--space-4));
-  z-index: 25;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  height: 56px;
-  padding: 0 var(--space-5);
-  border: none;
-  border-radius: var(--shape-md);
-  background: var(--primary-container);
-  color: var(--on-primary-container);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: 0.1px;
-  cursor: pointer;
-  box-shadow: var(--shadow-3);
-  transition: transform var(--dur-short) var(--ease-standard),
-    box-shadow var(--dur-short) var(--ease-standard);
-}
-
-.fab:hover {
-  background: color-mix(in srgb, var(--primary) 22%, var(--primary-container));
-}
-
-.fab:active {
-  transform: scale(0.97);
-}
-
 /* ================================================================ chips === */
 
 .chip-row {
@@ -1894,7 +1860,6 @@ details.disclosure > .output {
 @media print {
   .rail,
   .nav-bar,
-  .fab,
   .top-bar {
     display: none;
   }
