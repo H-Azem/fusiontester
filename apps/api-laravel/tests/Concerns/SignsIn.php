@@ -28,8 +28,9 @@ trait SignsIn
         $cookie = (string) config('fusion.session.cookie');
 
         $response = $this->postJson('/auth/login', [
-            'username' => 'admin',
-            'password' => 'admin',
+            // Read from config so renaming the seeded account never breaks the suite.
+            'username' => (string) config('fusion.admin.username'),
+            'password' => (string) config('fusion.admin.password'),
             'captchaId' => $challenge->getId(),
             'captchaText' => 'ZZZZZ',
         ]);

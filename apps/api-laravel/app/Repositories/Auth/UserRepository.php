@@ -31,4 +31,13 @@ class UserRepository
 
         return $user;
     }
+
+    /** Used once, to carry a deployment over to the username this app now ships with. */
+    public function rename(User $user, string $username): User
+    {
+        $user->setAttribute(UserInterface::USERNAME, mb_strtolower(trim($username)));
+        $user->save();
+
+        return $user;
+    }
 }

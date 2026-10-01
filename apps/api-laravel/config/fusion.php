@@ -41,9 +41,16 @@ return [
     ],
 
     'admin' => [
-        'username' => env('ADMIN_USERNAME', 'admin'),
+        'username' => env('ADMIN_USERNAME', 'fusion'),
         'password' => env('ADMIN_PASSWORD', 'admin'),
         'role' => UserInterface::ROLE_ADMIN,
+        /*
+         * Settings hold credentials that can reach the machine under test, so they
+         * sit behind a second password. The default is deliberately a placeholder:
+         * the dashboard asks for it before opening Settings and lets the signed-in
+         * user replace it.
+         */
+        'settings_password' => env('ADMIN_SETTINGS_PASSWORD', '12345'),
     ],
 
     /*

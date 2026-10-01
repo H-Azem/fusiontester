@@ -37,8 +37,8 @@ class AuthTest extends TestCase
         $this->admin();
 
         $response = $this->postJson('/auth/login', [
-            'username' => 'admin',
-            'password' => 'admin',
+            'username' => (string) config('fusion.admin.username'),
+            'password' => (string) config('fusion.admin.password'),
             'captchaId' => $this->issueCaptcha('AAAAA'),
             'captchaText' => 'WRONG',
         ]);
@@ -54,7 +54,7 @@ class AuthTest extends TestCase
 
         foreach (['BBBBB', 'CCCCC'] as $answer) {
             $this->postJson('/auth/login', [
-                'username' => 'admin',
+                'username' => (string) config('fusion.admin.username'),
                 'password' => 'wrong-password',
                 'captchaId' => $this->issueCaptcha($answer),
                 'captchaText' => $answer,
@@ -62,7 +62,7 @@ class AuthTest extends TestCase
         }
 
         $this->postJson('/auth/login', [
-            'username' => 'admin',
+            'username' => (string) config('fusion.admin.username'),
             'password' => 'wrong-password',
             'captchaId' => $this->issueCaptcha('DDDDD'),
             'captchaText' => 'DDDDD',
@@ -80,8 +80,8 @@ class AuthTest extends TestCase
         (new LockoutRepository)->block('127.0.0.1', 3, 'too_many_failures', now()->addHours(6));
 
         $this->postJson('/auth/login', [
-            'username' => 'admin',
-            'password' => 'admin',
+            'username' => (string) config('fusion.admin.username'),
+            'password' => (string) config('fusion.admin.password'),
             'captchaId' => $this->issueCaptcha('EEEEE'),
             'captchaText' => 'EEEEE',
         ])->assertStatus(429);
@@ -94,11 +94,11 @@ class AuthTest extends TestCase
         $cookie = (string) config('fusion.session.cookie');
 
         $response = $this->postJson('/auth/login', [
-            'username' => 'admin',
-            'password' => 'admin',
+            'username' => (string) config('fusion.admin.username'),
+            'password' => (string) config('fusion.admin.password'),
             'captchaId' => $this->issueCaptcha('FFFFF'),
             'captchaText' => 'fffff',
-        ])->assertSuccessful()->assertJsonPath('user.username', 'admin');
+        ])->assertSuccessful()->assertJsonPath('user.username', config('fusion.admin.username'));
 
         $response->assertCookie($cookie);
 
@@ -117,8 +117,8 @@ class AuthTest extends TestCase
 
         $cookie = (string) config('fusion.session.cookie');
         $login = $this->postJson('/auth/login', [
-            'username' => 'admin',
-            'password' => 'admin',
+            'username' => (string) config('fusion.admin.username'),
+            'password' => (string) config('fusion.admin.password'),
             'captchaId' => $this->issueCaptcha('GGGGG'),
             'captchaText' => 'GGGGG',
         ]);
@@ -126,7 +126,7 @@ class AuthTest extends TestCase
         $this->asSession((string) $login->getCookie($cookie, false)->getValue())
             ->getJson('/auth/me')
             ->assertSuccessful()
-            ->assertJsonPath('user.username', 'admin');
+            ->assertJsonPath('user.username', config('fusion.admin.username'));
     }
 
     #[Test]
@@ -136,8 +136,8 @@ class AuthTest extends TestCase
 
         $cookie = (string) config('fusion.session.cookie');
         $login = $this->postJson('/auth/login', [
-            'username' => 'admin',
-            'password' => 'admin',
+            'username' => (string) config('fusion.admin.username'),
+            'password' => (string) config('fusion.admin.password'),
             'captchaId' => $this->issueCaptcha('HHHHH'),
             'captchaText' => 'HHHHH',
         ]);
@@ -217,8 +217,8 @@ class AuthTest extends TestCase
         $answer = 'JJJJJ';
 
         $response = $this->postJson('/auth/login', [
-            'username' => 'admin',
-            'password' => 'admin',
+            'username' => (string) config('fusion.admin.username'),
+            'password' => (string) config('fusion.admin.password'),
             'captchaId' => $this->issueCaptcha($answer),
             'captchaText' => $answer,
         ]);
