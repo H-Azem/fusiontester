@@ -265,37 +265,39 @@ export function TestApps() {
 
             return (
               <li key={project.id} className="card">
-                <div className="row">
+                <div className="repo-row">
                   <button
                     type="button"
-                    className={isPinned ? "md-button icon" : "md-button icon faint"}
+                    className="repo-toggle"
+                    aria-expanded={isExpanded}
+                    onClick={() => void toggleExpanded(project.id)}
+                  >
+                    <span className="list-item-main">
+                      <span className="repo-name">{project.pathWithNamespace}</span>
+                      <span className="list-item-sub">
+                        {isPinned ? "pinned · " : ""}
+                        {project.visibility} · {project.defaultBranch ?? "no default branch"} · last
+                        activity {new Date(project.lastActivityAt).toLocaleDateString()}
+                      </span>
+                    </span>
+                    <Icon name={isExpanded ? "chevronDown" : "chevronRight"} size={18} />
+                  </button>
+
+                  {/* The star sits in the repository's own row and names it in its tooltip,
+                      so it can never read as belonging to the branch list below. */}
+                  <button
+                    type="button"
+                    className="md-button icon"
                     style={isPinned ? { color: "var(--warning)" } : undefined}
-                    title={isPinned ? "Unpin repository" : "Pin repository"}
-                    aria-label={isPinned ? "Unpin repository" : "Pin repository"}
                     aria-pressed={isPinned}
+                    title={
+                      isPinned
+                        ? `Unpin ${project.pathWithNamespace}`
+                        : `Pin ${project.pathWithNamespace}`
+                    }
                     onClick={() => void togglePin("repository", project.id, project.pathWithNamespace)}
                   >
                     <Icon name="star" size={18} />
-                  </button>
-
-                  <span className="list-item-main">
-                    <a className="repo-path" href={project.webUrl} target="_blank" rel="noreferrer">
-                      {project.pathWithNamespace}
-                    </a>
-                    <span className="list-item-sub">
-                      {project.visibility} · {project.defaultBranch ?? "no default branch"} · last
-                      activity {new Date(project.lastActivityAt).toLocaleDateString()}
-                    </span>
-                  </span>
-
-                  <button
-                    type="button"
-                    className="md-button tonal small"
-                    onClick={() => void toggleExpanded(project.id)}
-                    aria-expanded={isExpanded}
-                  >
-                    <Icon name={isExpanded ? "chevronDown" : "branch"} size={16} />
-                    {isExpanded ? "Hide branches" : "Branches"}
                   </button>
                 </div>
 
@@ -322,31 +324,42 @@ export function TestApps() {
                     {projectBranches && projectBranches.length > 0 && (
                       <>
                         <p className="md-body-sm faint">Pick the branch to test</p>
-                        <ul className="chip-row" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                        <ul className="branch-list">
                           {pinnedFirst(projectBranches, (branch) =>
                             pins.has(branchKey(project.id, branch.name)),
                           ).map((branch) => {
                             const branchPinned = pins.has(branchKey(project.id, branch.name));
                             const selected = selectedBranch === branch.name;
 
+                            // Name and star share one outlined unit, so the star belongs
+                            // visibly to this branch and not to the list around it.
                             return (
-                              <li key={branch.name} className="row" style={{ gap: 4 }}>
+                              <li
+                                key={branch.name}
+                                className={selected ? "branch-unit selected" : "branch-unit"}
+                              >
                                 <button
                                   type="button"
-                                  className={selected ? "chip selected" : "chip"}
+                                  className="branch-name"
                                   aria-pressed={selected}
                                   onClick={() => setSelectedBranch(branch.name)}
                                 >
                                   {branch.default && <Icon name="star" size={13} />}
-                                  {branch.name}
-                                  {branch.protected && <span className="faint">· protected</span>}
+                                  <span className="mono">{branch.name}</span>
+                                  {branch.protected && (
+                                    <span className="faint md-body-sm">protected</span>
+                                  )}
                                 </button>
                                 <button
                                   type="button"
-                                  className="md-button icon"
+                                  className="md-button icon small"
                                   style={branchPinned ? { color: "var(--warning)" } : undefined}
-                                  aria-label={branchPinned ? "Unpin branch" : "Pin branch"}
                                   aria-pressed={branchPinned}
+                                  title={
+                                    branchPinned
+                                      ? `Unpin branch ${branch.name}`
+                                      : `Pin branch ${branch.name}`
+                                  }
                                   onClick={() =>
                                     void togglePin(
                                       "branch",
@@ -362,6 +375,16 @@ export function TestApps() {
                             );
                           })}
                         </ul>
+
+                        <a
+                          className="md-button text small"
+                          href={project.webUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <Icon name="external" size={16} />
+                          Open in GitLab
+                        </a>
 
                         {selectedBranch && (
                           <BranchCheckPanel

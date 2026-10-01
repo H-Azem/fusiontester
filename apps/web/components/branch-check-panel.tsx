@@ -10,6 +10,7 @@ type BranchCheck = {
   ref: string;
   isFlutterApp: boolean;
   isFlutterAppReason: string;
+  hasWebFolder: boolean;
   hasMaestroFlows: boolean;
   hasMaestroFlowsReason: string;
   canContinue: boolean;
@@ -182,6 +183,7 @@ export function BranchCheckPanel({
           projectPath={projectPath}
           branch={branch}
           tests={tests}
+          hasWebFolder={check.hasWebFolder}
         />
       )}
     </div>

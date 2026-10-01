@@ -27,26 +27,31 @@ const PLATFORMS: Array<{ id: Platform; label: string; hint: string }> = [
   { id: "web", label: "Web", hint: "browser build" },
 ];
 
-const ORIENTATIONS: Array<{ id: Orientation; label: string }> = [
-  { id: "horizontal", label: "Landscape" },
-  { id: "vertical", label: "Portrait" },
+const ORIENTATIONS: Array<{ id: Orientation; label: string; icon: string; hint: string }> = [
+  { id: "horizontal", label: "Landscape", icon: "landscape", hint: "wider than tall" },
+  { id: "vertical", label: "Portrait", icon: "portrait", hint: "taller than wide" },
 ];
 
 /**
  * Starting a run is a decision, not a form to scroll past, so it lives in a
  * Material sheet: the repository and branch stay visible behind it, and on a phone
  * it rises from the bottom into the thumb zone.
+ *
+ * The shape and the lane are remembered per repository, so the second visit opens
+ * on the answer the first one gave.
  */
 export function RunConfiguration({
   projectId,
   projectPath,
   branch,
   tests,
+  hasWebFolder = false,
 }: {
   projectId: number;
   projectPath: string;
   branch: string;
   tests: MaestroTest[];
+  hasWebFolder?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -70,18 +75,42 @@ export function RunConfiguration({
 
     fetch(`/api/projects/${projectId}/settings`, { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((data: { orientation?: Orientation; platform?: Platform; dartDefines?: string } | null) => {
-        if (cancelled || !data) return;
-        if (data.orientation) setOrientation(data.orientation);
-        if (data.platform) setPlatform(data.platform);
-        if (typeof data.dartDefines === "string") setDartDefines(data.dartDefines);
-      })
+      .then(
+        (
+          data:
+            | {
+                orientation?: Orientation;
+                platform?: Platform;
+                dartDefines?: string;
+                orientationSet?: boolean;
+                platformSet?: boolean;
+              }
+            | null,
+        ) => {
+          if (cancelled || !data) return;
+          if (data.orientation) setOrientation(data.orientation);
+          // An app without a web folder can only run on a device, so that is the
+          // default until someone chooses otherwise for this repository.
+          if (data.platformSet && data.platform) setPlatform(data.platform);
+          else setPlatform(hasWebFolder ? "web" : "android");
+          if (typeof data.dartDefines === "string") setDartDefines(data.dartDefines);
+        },
+      )
       .catch(() => undefined);
 
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, hasWebFolder]);
+
+  /** Remember a choice for the next run; a failure here must not block the form. */
+  function remember(values: { orientation?: Orientation; platform?: Platform }) {
+    void fetch(`/api/projects/${projectId}/settings`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(values),
+    }).catch(() => undefined);
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -264,7 +293,10 @@ export function RunConfiguration({
                       role="radio"
                       aria-checked={platform === item.id}
                       className={platform === item.id ? "chip selected" : "chip"}
-                      onClick={() => setPlatform(item.id)}
+                      onClick={() => {
+                        setPlatform(item.id);
+                        remember({ platform: item.id });
+                      }}
                     >
                       <Icon name={item.id === "android" ? "device" : "bolt"} size={16} />
                       {item.label}
@@ -281,8 +313,13 @@ export function RunConfiguration({
                       role="radio"
                       aria-checked={orientation === item.id}
                       className={orientation === item.id ? "chip selected" : "chip"}
-                      onClick={() => setOrientation(item.id)}
+                      title={item.hint}
+                      onClick={() => {
+                        setOrientation(item.id);
+                        remember({ orientation: item.id });
+                      }}
                     >
+                      <Icon name={item.icon} size={16} />
                       {item.label}
                     </button>
                   ))}
@@ -320,21 +357,28 @@ export function RunConfiguration({
                 </label>
               </div>
 
-              <div className="stack">
-                <h3 className="md-title-sm">3 · Build details</h3>
-                <label className="field">
-                  <span className="field-label">Extra build defines</span>
-                  <input
-                    value={dartDefines}
-                    onChange={(event) => setDartDefines(event.target.value)}
-                    placeholder="ENABLE_DEV_TOOLS=true"
-                    spellCheck={false}
-                  />
-                  <span className="hint">
-                    Passed to flutter build as --dart-define. Remembered per repository.
-                  </span>
-                </label>
-              </div>
+              <details className="disclosure">
+                <summary>Advanced · extra build defines</summary>
+                <div className="stack" style={{ padding: "var(--space-4)" }}>
+                  <label className="field">
+                    <span className="field-label">Extra build defines</span>
+                    <input
+                      value={dartDefines}
+                      onChange={(event) => setDartDefines(event.target.value)}
+                      placeholder="KIOSK_IDLE_SECONDS=300"
+                      spellCheck={false}
+                    />
+                    <span className="hint">
+                      Values added to the app&apos;s compile time as <span className="mono">
+                        --dart-define
+                      </span>
+                      . Only needed when an app reads a setting this way, for example a test
+                      window it keeps open for Maestro. Nothing is required here for a normal
+                      run, and it is remembered per repository.
+                    </span>
+                  </label>
+                </div>
+              </details>
 
               {startError && (
                 <p className="snackbar error" role="alert">

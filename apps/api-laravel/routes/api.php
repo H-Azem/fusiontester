@@ -43,6 +43,8 @@ Route::middleware('auth.session')->group(function () {
 
     Route::get('projects/{projectId}/settings', [ProjectSettingsController::class, 'show'])
         ->whereNumber('projectId');
+    Route::put('projects/{projectId}/settings', [ProjectSettingsController::class, 'update'])
+        ->whereNumber('projectId');
 
     Route::get('runs', [RunController::class, 'index']);
     Route::post('runs', [RunController::class, 'store']);

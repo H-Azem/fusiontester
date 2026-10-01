@@ -1397,6 +1397,53 @@ details.disclosure > .output {
   flex-wrap: wrap;
 }
 
+/* ----------------------------------------------------------- scrollbars ---- */
+
+/* Dialogs, code boxes and tables are the places a scrollbar appears, so it is
+   styled there rather than globally: a thin translucent thumb that thickens on
+   hover, instead of the platform's bright default on a dark surface. */
+.sheet,
+.output,
+.table-wrap {
+  scrollbar-width: thin;
+  scrollbar-color: var(--outline) transparent;
+}
+
+.sheet::-webkit-scrollbar,
+.output::-webkit-scrollbar,
+.table-wrap::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.sheet::-webkit-scrollbar-track,
+.output::-webkit-scrollbar-track,
+.table-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sheet::-webkit-scrollbar-thumb,
+.output::-webkit-scrollbar-thumb,
+.table-wrap::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--outline) 75%, transparent);
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: var(--shape-full);
+}
+
+.sheet::-webkit-scrollbar-thumb:hover,
+.output::-webkit-scrollbar-thumb:hover,
+.table-wrap::-webkit-scrollbar-thumb:hover {
+  background: var(--outline);
+  background-clip: content-box;
+}
+
+.sheet::-webkit-scrollbar-corner,
+.output::-webkit-scrollbar-corner,
+.table-wrap::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 /* ============================================================ snackbar ==== */
 
 .snackbar {
@@ -1584,16 +1631,93 @@ details.disclosure > .output {
   }
 }
 
-.repo-path {
+/* ------------------------------------------------------ repositories ------- */
+
+/* The whole row opens the branch list; the star is a control of its own beside it. */
+.repo-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.repo-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--shape-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--dur-short) var(--ease-standard);
+}
+
+.repo-toggle:hover {
+  background: color-mix(in srgb, var(--on-surface) 6%, transparent);
+}
+
+.repo-toggle .list-item-main {
+  flex: 1;
+}
+
+.repo-name {
   font-family: var(--font-mono);
   font-size: 13px;
-  color: var(--on-surface);
-  text-decoration: none;
   overflow-wrap: anywhere;
 }
 
-.repo-path:hover {
-  color: var(--primary);
+.branch-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* One outlined unit per branch: the name and its pin cannot drift apart. */
+.branch-unit {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding-inline-end: var(--space-1);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--shape-full);
+  background: var(--surface-container);
+  transition: border-color var(--dur-short) var(--ease-standard);
+}
+
+.branch-unit:hover {
+  border-color: var(--outline);
+}
+
+.branch-unit.selected {
+  border-color: var(--primary);
+  background: var(--primary-container);
+}
+
+.branch-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--on-surface-variant);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: var(--shape-full);
+}
+
+.branch-unit.selected .branch-name {
+  color: var(--on-primary-container);
 }
 
 .branches {

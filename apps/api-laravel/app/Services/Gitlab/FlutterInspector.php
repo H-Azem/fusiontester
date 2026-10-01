@@ -70,6 +70,9 @@ class FlutterInspector
             'ref' => $ref,
             'isFlutterApp' => $isFlutterApp,
             'isFlutterAppReason' => $isFlutterAppReason,
+            // The dashboard picks the lane from this: an app with a web folder can
+            // be driven in a browser, one without can only run on a device.
+            'hasWebFolder' => in_array('web', $platforms, true),
             'hasMaestroFlows' => $hasMaestroFlows,
             'hasMaestroFlowsReason' => $hasMaestroFlowsReason,
             'canContinue' => $isFlutterApp && $hasMaestroFlows,

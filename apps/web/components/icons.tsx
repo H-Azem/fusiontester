@@ -108,6 +108,18 @@ const PATHS: Record<string, ReactNode> = {
       <path d="M11 18.5h2" />
     </>
   ),
+  landscape: (
+    <>
+      <rect x="2.5" y="5.5" width="19" height="13" rx="2.5" />
+      <path d="M19 12h1.5" />
+    </>
+  ),
+  portrait: (
+    <>
+      <rect x="5.5" y="2.5" width="13" height="19" rx="2.5" />
+      <path d="M12 19v1.5" />
+    </>
+  ),
   live: (
     <>
       <circle cx="12" cy="12" r="3" />
