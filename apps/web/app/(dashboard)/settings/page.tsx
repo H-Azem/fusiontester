@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { AiSettings } from "@/components/ai-settings";
+import { Icon } from "@/components/icons";
+import { StatusChip, relativeTime } from "@/components/status";
 
 type Config = {
   configured: boolean;
@@ -65,12 +67,6 @@ function GitlabSettings() {
     void load();
   }, [load]);
 
-  const overrides = {
-    baseUrl: baseUrl || undefined,
-    token: token || undefined,
-    caCertificate: caCertificate.startsWith("••••") ? undefined : caCertificate,
-  };
-
   async function handleSave(event: React.FormEvent) {
     event.preventDefault();
     setBusy("save");
@@ -95,7 +91,7 @@ function GitlabSettings() {
       }
 
       setToken("");
-      setNotice("Saved. The token is encrypted at rest and will not be shown again.");
+      setNotice("Saved. The token is encrypted at rest and never shown again.");
       await load();
     } finally {
       setBusy(null);
@@ -112,7 +108,12 @@ function GitlabSettings() {
       const response = await fetch("/api/settings/gitlab/test", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...overrides, testRepo: testRepo || undefined }),
+        body: JSON.stringify({
+          baseUrl: baseUrl || undefined,
+          token: token || undefined,
+          caCertificate: caCertificate.startsWith("••••") ? undefined : caCertificate,
+          testRepo: testRepo || undefined,
+        }),
       });
 
       const data = (await response.json()) as VerifyResult & { message?: string };
@@ -130,82 +131,113 @@ function GitlabSettings() {
   return (
     <section className="panel">
       <div className="panel-head">
-        <h2>GitLab connection</h2>
-        <span className="muted">Source of the repositories under test</span>
+        <div>
+          <h2>GitLab connection</h2>
+          <p className="panel-sub">Where the repositories under test are cloned from.</p>
+        </div>
+        <StatusChip
+          status={config?.configured ? (config.lastVerifyOk === false ? "failed" : "passed") : "queued"}
+          label={config?.configured ? (config.lastVerifyOk === false ? "check failed" : "connected") : "not set"}
+        />
       </div>
 
       {config?.configured && (
-        <p className="muted">
-          Stored token {config.tokenHint}
+        <p className="md-body-sm muted">
+          Token {config.tokenHint}
           {config.hasCaCertificate ? " · custom CA certificate stored" : ""}
-          {config.lastVerifiedAt
-            ? ` · last checked ${new Date(config.lastVerifiedAt).toLocaleString()} (${config.lastVerifyOk ? "ok" : "failed"})`
-            : ""}
+          {config.lastVerifiedAt ? ` · checked ${relativeTime(config.lastVerifiedAt)}` : ""}
         </p>
       )}
 
-      <form onSubmit={handleSave}>
-        <label htmlFor="baseUrl">GitLab base URL</label>
-        <input
-          id="baseUrl"
-          placeholder="https://gitlab.example.com"
-          value={baseUrl}
-          onChange={(event) => setBaseUrl(event.target.value)}
-          required
-        />
+      <form className="stack" onSubmit={handleSave}>
+        <label className="field">
+          <span className="field-label">GitLab base URL</span>
+          <input
+            placeholder="https://gitlab.example.com"
+            value={baseUrl}
+            onChange={(event) => setBaseUrl(event.target.value)}
+            required
+          />
+        </label>
 
-        <label htmlFor="token">
-          Personal access token{" "}
-          <span className="muted">
-            needs {REQUIRED_SCOPES.join(" + ")}
-            {config?.configured ? " · leave blank to keep the stored token" : ""}
+        <label className="field">
+          <span className="field-label">Personal access token</span>
+          <input
+            type="password"
+            autoComplete="off"
+            placeholder={config?.configured ? "unchanged" : "glpat-…"}
+            value={token}
+            onChange={(event) => setToken(event.target.value)}
+          />
+          <span className="hint">
+            Needs {REQUIRED_SCOPES.join(" + ")}
+            {config?.configured ? " · leave blank to keep the stored token" : ""}. The same
+            token authenticates the private packages a build fetches.
           </span>
         </label>
-        <input
-          id="token"
-          type="password"
-          autoComplete="off"
-          placeholder={config?.configured ? "unchanged" : "glpat-…"}
-          value={token}
-          onChange={(event) => setToken(event.target.value)}
-        />
 
-        <label htmlFor="testRepo">
-          Repository to verify cloning <span className="muted">group/project, optional</span>
+        <label className="field">
+          <span className="field-label">Repository to verify cloning</span>
+          <input
+            placeholder="my-group/my-project"
+            value={testRepo}
+            onChange={(event) => setTestRepo(event.target.value)}
+          />
+          <span className="hint">Optional. Runs a real clone as part of the test.</span>
         </label>
-        <input
-          id="testRepo"
-          placeholder="my-group/my-project"
-          value={testRepo}
-          onChange={(event) => setTestRepo(event.target.value)}
-        />
 
-        <label htmlFor="caCertificate">
-          Custom CA certificate <span className="muted">PEM, optional</span>
+        <label className="field">
+          <span className="field-label">Custom CA certificate</span>
+          <textarea
+            placeholder="-----BEGIN CERTIFICATE-----"
+            value={caCertificate}
+            onChange={(event) => setCaCertificate(event.target.value)}
+          />
+          <span className="hint">PEM, optional. Only needed for a self-signed GitLab.</span>
         </label>
-        <textarea
-          id="caCertificate"
-          placeholder="-----BEGIN CERTIFICATE-----"
-          value={caCertificate}
-          onChange={(event) => setCaCertificate(event.target.value)}
-        />
 
-        {error && <p className="error">{error}</p>}
-        {notice && <p className="success">{notice}</p>}
+        {error && (
+          <p className="snackbar error" role="alert">
+            <Icon name="warning" size={18} />
+            {error}
+          </p>
+        )}
 
-        <div className="actions">
-          <button type="submit" disabled={busy !== null}>
-            {busy === "save" ? "Saving…" : "Save"}
+        {notice && (
+          <p className="snackbar success" role="status">
+            <Icon name="check" size={18} />
+            {notice}
+          </p>
+        )}
+
+        <div className="row">
+          <button type="submit" className="md-button filled" disabled={busy !== null}>
+            {busy === "save" ? <span className="spinner" /> : <Icon name="check" size={18} />}
+            {busy === "save" ? "Saving…" : "Save connection"}
           </button>
-          <button type="button" onClick={() => void handleTest()} disabled={busy !== null}>
+          <button
+            type="button"
+            className="md-button tonal"
+            onClick={() => void handleTest()}
+            disabled={busy !== null}
+          >
+            {busy === "test" ? <span className="spinner" /> : <Icon name="live" size={18} />}
             {busy === "test" ? "Testing…" : "Test connection"}
           </button>
         </div>
       </form>
 
       {result && (
-        <section>
-          <h2>Test result</h2>
+        <div className="card filled stack">
+          <div className="row">
+            <StatusChip status={result.ok ? "passed" : "failed"} label={result.ok ? "ready" : "not ready"} />
+            {result.expiresAt && result.daysUntilExpiry !== null && (
+              <span className="status queued">
+                <Icon name="clock" size={14} />
+                token expires in {result.daysUntilExpiry} days
+              </span>
+            )}
+          </div>
 
           <ul className="scopes">
             {(result.scopes ?? []).map((scope) => (
@@ -223,36 +255,39 @@ function GitlabSettings() {
             ))}
           </ul>
 
-          <pre>
-            {[
-              `base url      ${result.baseUrl}`,
-              `identity      ${result.identity ? `${result.identity.username} (${result.identity.name})` : "unknown"}`,
-              `token name    ${result.tokenName ?? "unknown"}`,
-              result.scopesReadable
-                ? `scopes        ${(result.scopes ?? []).join(", ") || "none"}`
-                : "scopes        could not be read from this token",
-              result.expiresAt
-                ? `expires       ${result.expiresAt}${result.daysUntilExpiry !== null ? ` (${result.daysUntilExpiry} days)` : ""}`
-                : "expires       never",
-              result.clone.attempted
-                ? `clone check   ${result.clone.ok ? "ok" : "failed"} — ${result.clone.repo}`
-                : "clone check   not run (no repository given)",
-              `overall       ${result.ok ? "ready" : "not ready"}`,
-            ].join("\n")}
-          </pre>
+          <dl className="meta-grid">
+            <div>
+              <dt>Identity</dt>
+              <dd>
+                {result.identity ? `${result.identity.username} (${result.identity.name})` : "unknown"}
+              </dd>
+            </div>
+            <div>
+              <dt>Token name</dt>
+              <dd>{result.tokenName ?? "unknown"}</dd>
+            </div>
+            <div>
+              <dt>Clone check</dt>
+              <dd>
+                {result.clone.attempted
+                  ? `${result.clone.ok ? "cloned" : "failed"} — ${result.clone.repo}`
+                  : "not run"}
+              </dd>
+            </div>
+          </dl>
 
           {result.clone.attempted && result.clone.message && (
-            <pre className={result.clone.ok ? "" : "error"}>{result.clone.message}</pre>
+            <pre className={result.clone.ok ? "output" : "output error"}>{result.clone.message}</pre>
           )}
 
-          {result.error && <pre className="error">{result.error}</pre>}
+          {result.error && <pre className="output error">{result.error}</pre>}
 
           {result.warnings.map((warning) => (
-            <pre key={warning} className="error">
+            <pre key={warning} className="output error">
               {warning}
             </pre>
           ))}
-        </section>
+        </div>
       )}
     </section>
   );
@@ -260,9 +295,9 @@ function GitlabSettings() {
 
 export default function SettingsPage() {
   return (
-    <>
+    <div className="stack">
       <GitlabSettings />
       <AiSettings />
-    </>
+    </div>
   );
 }

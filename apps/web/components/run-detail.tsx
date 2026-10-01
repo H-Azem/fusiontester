@@ -3,28 +3,27 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { Bird, BIRD_FOR_STATUS, type BirdState } from "./bird";
+import { Icon } from "./icons";
+import { StatusChip, relativeTime, shortDuration, stepGlyph, statusTone } from "./status";
 import { useRun } from "./use-runs";
-import { StatusBadge, statusClass } from "./runs-table";
 
-const STEP_MARK: Record<string, string> = {
-  pending: "○",
-  running: "●",
-  done: "✓",
-  failed: "✗",
-  skipped: "–",
-};
-
-/** How often a live frame lands, matching the capture interval on the server. */
 const LIVE_REFRESH_MS = 2500;
 
+const VERDICT: Record<string, { title: string; sub: string }> = {
+  passed: { title: "Test passed", sub: "Every selected flow reached the end." },
+  failed: { title: "Test failed", sub: "A step below reports what it saw." },
+  running: { title: "Running", sub: "The pipeline is working through the steps." },
+  queued: { title: "Queued", sub: "A worker will pick this up shortly." },
+};
+
 /**
- * The device screen while a run is in flight. The frame is overwritten in place,
- * so the query string is what forces the browser to ask for the new one; after
- * the run ends the last frame stays put until the app repaints.
+ * The device screen while a run is in flight. The frame is overwritten in place on
+ * the server, so the query string is what makes the browser ask for the new one.
  */
 function LiveView({ runId, running, hasFrame }: { runId: string; running: boolean; hasFrame: boolean }) {
   const [tick, setTick] = useState(0);
-  const [missing, setMissing] = useState(false);
+  const [missing, setMissing] = useState(!hasFrame);
 
   useEffect(() => {
     if (!running) return;
@@ -38,28 +37,69 @@ function LiveView({ runId, running, hasFrame }: { runId: string; running: boolea
     <section className="panel">
       <div className="panel-head">
         <h2>Live device</h2>
-        <a
-          href={`/api/runs/${runId}/live?t=${tick}`}
-          target="_blank"
-          rel="noreferrer"
-          className="link"
-        >
-          Open full size
-        </a>
+        <span className="row">
+          {running && (
+            <span className="status running">
+              <span className="dot" aria-hidden="true" />
+              streaming
+            </span>
+          )}
+          <a
+            className="md-button text small"
+            href={`/api/runs/${runId}/live?t=${tick}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Icon name="external" size={16} />
+            Full size
+          </a>
+        </span>
       </div>
 
       {missing ? (
-        <p className="muted">Waiting for the first frame…</p>
+        <div className="live-frame pending">Waiting for the first frame…</div>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          className="screenshot"
+          className="live-frame"
           src={`/api/runs/${runId}/live?t=${tick}`}
           alt="The device screen as the test runs"
           onError={() => setMissing(true)}
           onLoad={() => setMissing(false)}
         />
       )}
+
+      <p className="md-body-sm muted">
+        A frame every {LIVE_REFRESH_MS / 1000} seconds, captured from the emulator as it is
+        driven. The device sleeps while the app builds, so frames start when the test does.
+      </p>
+    </section>
+  );
+}
+
+function ScreenshotPanel({
+  runId,
+  kind,
+  title,
+  note,
+}: {
+  runId: string;
+  kind: "screenshot" | "maestro-screenshot" | "ai-screenshot";
+  title: string;
+  note: string;
+}) {
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>{title}</h2>
+        <a className="md-button text small" href={`/api/runs/${runId}/${kind}`} target="_blank" rel="noreferrer">
+          <Icon name="external" size={16} />
+          Full size
+        </a>
+      </div>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img className="live-frame" src={`/api/runs/${runId}/${kind}`} alt={note} />
+      <p className="md-body-sm muted">{note}</p>
     </section>
   );
 }
@@ -69,165 +109,176 @@ export function RunDetail({ id }: { id: string }) {
 
   if (error) {
     return (
-      <>
-        <p className="error">{error}</p>
-        <p>
-          <Link href="/runs" className="link">
-            Back to test runs
-          </Link>
-        </p>
-      </>
+      <div className="empty-state">
+        <Bird state="not-found" size={120} float />
+        <h3 className="md-title">That run is gone</h3>
+        <p className="md-body">{error}</p>
+        <Link href="/runs" className="md-button filled">
+          <Icon name="runs" size={18} />
+          Back to test runs
+        </Link>
+      </div>
     );
   }
 
-  if (!loaded || !run) return <p className="muted">Loading…</p>;
+  if (!loaded || !run) {
+    return (
+      <div className="stack" aria-busy="true">
+        <span className="skeleton" style={{ height: 88, borderRadius: 24 }} />
+        <span className="skeleton" style={{ height: 240, borderRadius: 24 }} />
+      </div>
+    );
+  }
+
+  const verdict = VERDICT[run.status] ?? { title: run.status, sub: "" };
+  const bird: BirdState = BIRD_FOR_STATUS[run.status] ?? "unknown";
+  const duration = shortDuration(run.startedAt, run.finishedAt);
 
   return (
     <>
       <p className="breadcrumb">
-        <Link href="/runs" className="link">
-          Test runs
-        </Link>
-        <span className="muted"> / {run.projectPath}</span>
+        <Link href="/runs">Test runs</Link>
+        <span aria-hidden="true">/</span>
+        <span className="mono">{run.id.slice(0, 8)}</span>
       </p>
 
-      <div className="detail-head">
-        <StatusBadge status={run.status} />
-        <span className="detail-path">{run.projectPath}</span>
-        <span className="muted mono">{run.branch}</span>
-      </div>
-
-      <dl className="meta-grid">
-        <div>
-          <dt>Tests</dt>
-          <dd>{run.tests.length > 0 ? run.tests.join(", ") : "—"}</dd>
-        </div>
-        <div>
-          <dt>Run with</dt>
-          <dd>{run.runKinds.join(" + ") || "—"}</dd>
-        </div>
-        <div>
-          <dt>Environment</dt>
-          <dd>{run.environments.join(" + ") || "—"}</dd>
-        </div>
-        <div>
-          <dt>Orientation</dt>
-          <dd>{run.orientation === "vertical" ? "Vertical" : "Horizontal"}</dd>
-        </div>
-        <div>
-          <dt>Runs on</dt>
-          <dd>
-            {run.platform === "android" ? "Android device" : "Web"}
-            {run.live ? " · live view" : ""}
-          </dd>
-        </div>
-        {run.dartDefines ? (
-          <div>
-            <dt>Build defines</dt>
-            <dd className="mono">{`ENABLE_SEMANTICS=true ${run.dartDefines}`}</dd>
-          </div>
-        ) : null}
-        <div>
-          <dt>Started</dt>
-          <dd>{run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</dd>
-        </div>
-        <div>
-          <dt>Finished</dt>
-          <dd>{run.finishedAt ? new Date(run.finishedAt).toLocaleString() : "—"}</dd>
-        </div>
-      </dl>
-
       <section className="panel">
-        <h2>Progress</h2>
-        <ol className="run-steps">
-          {run.steps.map((step) => (
-            <li key={step.key} className={statusClass(step.status)}>
-              <span className="mark">{STEP_MARK[step.status] ?? "○"}</span>
-              <span className="step-label">{step.label}</span>
-              <span className="muted step-time">
-                {step.finishedAt
-                  ? new Date(step.finishedAt).toLocaleTimeString()
-                  : step.status === "running"
-                    ? "running…"
-                    : ""}
-              </span>
-              {step.output && <pre className="step-output">{step.output}</pre>}
-            </li>
-          ))}
-        </ol>
+        <div className="verdict">
+          <Bird state={bird} size={72} float={run.status === "running"} />
+          <div className="verdict-copy">
+            <span className="verdict-title">{verdict.title}</span>
+            <span className="verdict-sub">
+              {run.projectPath} · <span className="mono">{run.branch}</span>
+              {duration ? ` · took ${duration}` : ""}
+            </span>
+            <span className="row" style={{ marginTop: 8 }}>
+              <StatusChip status={run.status} />
+              {run.platform === "android" ? (
+                <span className="status queued">
+                  <Icon name="device" size={14} />
+                  Android device
+                </span>
+              ) : (
+                <span className="status queued">Web</span>
+              )}
+              {run.live && <span className="status running">live view</span>}
+            </span>
+          </div>
+        </div>
 
-        {run.errorMessage && <p className="error">{run.errorMessage}</p>}
+        <dl className="meta-grid">
+          <div>
+            <dt>Tests</dt>
+            <dd>{run.tests.length > 0 ? run.tests.join(", ") : "all flows"}</dd>
+          </div>
+          <div>
+            <dt>Run with</dt>
+            <dd>{run.runKinds.join(" + ") || "—"}</dd>
+          </div>
+          <div>
+            <dt>Environment</dt>
+            <dd>{run.environments.join(" + ")}</dd>
+          </div>
+          <div>
+            <dt>Orientation</dt>
+            <dd>{run.orientation === "vertical" ? "Vertical" : "Horizontal"}</dd>
+          </div>
+          <div>
+            <dt>Started</dt>
+            <dd>{run.startedAt ? new Date(run.startedAt).toLocaleString() : "—"}</dd>
+          </div>
+          <div>
+            <dt>Finished</dt>
+            <dd>{run.finishedAt ? relativeTime(run.finishedAt) : "—"}</dd>
+          </div>
+        </dl>
+
+        {run.errorMessage && (
+          <pre className="output error" role="alert">
+            {run.errorMessage}
+          </pre>
+        )}
       </section>
 
       {run.platform === "android" && (
         <LiveView runId={run.id} running={run.status === "running"} hasFrame={run.hasLiveFrame} />
       )}
 
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Steps</h2>
+          <span className="panel-sub">
+            {run.steps.filter((step) => step.status === "done").length} of {run.steps.length} done
+          </span>
+        </div>
+
+        <ol className="stepper">
+          {run.steps.map((step) => (
+            <li key={step.key} className={`step ${statusTone(step.status)}`}>
+              <div className="step-rail">
+                <span className="step-marker">{stepGlyph(step.status)}</span>
+                <span className="step-line" aria-hidden="true" />
+              </div>
+              <div className="step-body">
+                <div className="step-head">
+                  <span className="step-name">{step.label}</span>
+                  <span className="step-time">
+                    {step.finishedAt
+                      ? new Date(step.finishedAt).toLocaleTimeString()
+                      : step.status === "running"
+                        ? "running…"
+                        : ""}
+                  </span>
+                </div>
+
+                {step.output && step.output.trim() !== "" && (
+                  <details className="disclosure">
+                    <summary>Show output</summary>
+                    <pre className="output">{step.output}</pre>
+                  </details>
+                )}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+
       {run.hasScreenshot && (
-        <section className="panel">
-          <div className="panel-head">
-            <h2>App at launch</h2>
-            <a
-              href={`/api/runs/${run.id}/screenshot`}
-              target="_blank"
-              rel="noreferrer"
-              className="link"
-            >
-              Open full size
-            </a>
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="screenshot"
-            src={`/api/runs/${run.id}/screenshot`}
-            alt="The app as it appeared when it loaded"
-          />
-        </section>
+        <ScreenshotPanel
+          runId={run.id}
+          kind="screenshot"
+          title="App at launch"
+          note="What the app looked like the moment it came up, before any flow touched it."
+        />
       )}
 
       {run.hasMaestroScreenshot && (
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Maestro failure</h2>
-            <a
-              href={`/api/runs/${run.id}/maestro-screenshot`}
-              target="_blank"
-              rel="noreferrer"
-              className="link"
-            >
-              Open full size
-            </a>
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="screenshot"
-            src={`/api/runs/${run.id}/maestro-screenshot`}
-            alt="The app as Maestro left it when the test failed"
-          />
-        </section>
+        <ScreenshotPanel
+          runId={run.id}
+          kind="maestro-screenshot"
+          title="Maestro failure"
+          note="The screen Maestro was looking at when its assertion failed."
+        />
       )}
 
       {run.hasAiScreenshot && (
-        <section className="panel">
-          <div className="panel-head">
-            <h2>AI failure</h2>
-            <a
-              href={`/api/runs/${run.id}/ai-screenshot`}
-              target="_blank"
-              rel="noreferrer"
-              className="link"
-            >
-              Open full size
-            </a>
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="screenshot"
-            src={`/api/runs/${run.id}/ai-screenshot`}
-            alt="The app as the AI agent found it when the step failed"
-          />
-        </section>
+        <ScreenshotPanel
+          runId={run.id}
+          kind="ai-screenshot"
+          title="AI failure"
+          note="The screen the AI lane captured and analysed when a step did not land."
+        />
       )}
+
+      <div className="row">
+        <Link href="/projects" className="md-button tonal">
+          <Icon name="add" size={18} />
+          Start another test
+        </Link>
+        <Link href="/runs" className="md-button text">
+          All runs
+        </Link>
+      </div>
     </>
   );
 }

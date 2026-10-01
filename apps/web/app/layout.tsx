@@ -1,26 +1,42 @@
-import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Roboto, Roboto_Mono } from "next/font/google";
 import "./globals.css";
 
 /**
- * Linear's display/text cuts are proprietary. The spec names Inter (weights
- * 500/600/700) as the closest free substitute, and JetBrains Mono for mono.
+ * Roboto is the typeface Flutter renders with, so the dashboard reads as part of
+ * the same family as the apps it tests. Roboto Mono carries ids, branches and
+ * command output.
+ *
+ * Weights are limited to the four the M3 scale actually uses, because loading
+ * more costs every visitor bytes they never see.
  */
-const sans = Inter({
+const sans = Roboto({
   subsets: ["latin"],
-  variable: "--font-sans",
+  weight: ["400", "500"],
+  variable: "--font-roboto",
   display: "swap",
 });
 
-const mono = JetBrains_Mono({
+const mono = Roboto_Mono({
   subsets: ["latin"],
-  variable: "--font-mono",
+  weight: ["400", "500"],
+  variable: "--font-roboto-mono",
   display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "Fusion Tester",
   description: "Maestro flow orchestration for Flutter apps",
+  applicationName: "Fusion Tester",
+};
+
+/** Paints the notch area so the mobile navigation bar can sit in the safe zone. */
+export const viewport: Viewport = {
+  themeColor: "#0b1220",
+  colorScheme: "dark",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

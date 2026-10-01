@@ -4,8 +4,10 @@ export default function RunsPage() {
   return (
     <section className="panel">
       <div className="panel-head">
-        <h2>All runs</h2>
-        <span className="muted">Click a row for its step-by-step progress</span>
+        <div>
+          <h2>Test runs</h2>
+          <p className="panel-sub">Open a run to watch its steps, its device and its screenshots.</p>
+        </div>
       </div>
       <RunsList />
     </section>

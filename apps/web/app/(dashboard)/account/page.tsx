@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { Icon } from "@/components/icons";
+
 export default function ChangePasswordPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -16,7 +18,7 @@ export default function ChangePasswordPage() {
     setSuccess(null);
 
     if (newPassword !== confirmPassword) {
-      setError("New passwords do not match.");
+      setError("The new passwords do not match.");
       return;
     }
 
@@ -29,13 +31,10 @@ export default function ChangePasswordPage() {
         body: JSON.stringify({ currentPassword, newPassword }),
       });
 
-      const data = (await response.json()) as {
-        message?: string;
-        revokedSessions?: number;
-      };
+      const data = (await response.json()) as { message?: string; revokedSessions?: number };
 
       if (!response.ok) {
-        setError(data.message ?? "Could not change password.");
+        setError(data.message ?? "Could not change the password.");
         return;
       }
 
@@ -55,50 +54,91 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <section className="panel">
-      <div className="panel-head">
-        <h2>Change password</h2>
-        <span className="muted">Changing it signs out your other sessions</span>
-      </div>
+    <div className="split">
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Change password</h2>
+            <p className="panel-sub">Changing it signs your other sessions out.</p>
+          </div>
+        </div>
 
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="currentPassword">Current password</label>
-        <input
-          id="currentPassword"
-          type="password"
-          autoComplete="current-password"
-          value={currentPassword}
-          onChange={(event) => setCurrentPassword(event.target.value)}
-          required
-        />
+        <form className="stack" onSubmit={handleSubmit}>
+          <label className="field">
+            <span className="field-label">Current password</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              required
+            />
+          </label>
 
-        <label htmlFor="newPassword">New password</label>
-        <input
-          id="newPassword"
-          type="password"
-          autoComplete="new-password"
-          value={newPassword}
-          onChange={(event) => setNewPassword(event.target.value)}
-          required
-        />
+          <label className="field">
+            <span className="field-label">New password</span>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              required
+            />
+          </label>
 
-        <label htmlFor="confirmPassword">Confirm new password</label>
-        <input
-          id="confirmPassword"
-          type="password"
-          autoComplete="new-password"
-          value={confirmPassword}
-          onChange={(event) => setConfirmPassword(event.target.value)}
-          required
-        />
+          <label className="field">
+            <span className="field-label">Confirm new password</span>
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              required
+            />
+          </label>
 
-        {error && <p className="error">{error}</p>}
-        {success && <p className="success">{success}</p>}
+          {error && (
+            <p className="snackbar error" role="alert">
+              <Icon name="warning" size={18} />
+              {error}
+            </p>
+          )}
 
-        <button type="submit" disabled={submitting}>
-          {submitting ? "Saving…" : "Change password"}
-        </button>
-      </form>
-    </section>
+          {success && (
+            <p className="snackbar success" role="status">
+              <Icon name="check" size={18} />
+              {success}
+            </p>
+          )}
+
+          <div className="row">
+            <button type="submit" className="md-button filled" disabled={submitting}>
+              {submitting ? <span className="spinner" /> : <Icon name="check" size={18} />}
+              {submitting ? "Saving…" : "Change password"}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Session rules</h2>
+        </div>
+        <dl className="meta-grid">
+          <div>
+            <dt>Failed attempts</dt>
+            <dd>Three from one address and it is blocked for six hours.</dd>
+          </div>
+          <div>
+            <dt>Captcha</dt>
+            <dd>Wrong codes are not counted, so a misread digit cannot lock you out.</dd>
+          </div>
+          <div>
+            <dt>Other sessions</dt>
+            <dd>Changing the password revokes every session except this one.</dd>
+          </div>
+        </dl>
+      </section>
+    </div>
   );
 }

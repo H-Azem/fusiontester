@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { Bird } from "./bird";
 import { BranchCheckPanel } from "./branch-check-panel";
+import { Icon } from "./icons";
 
 type Project = {
   id: number;
@@ -97,8 +99,7 @@ export function TestApps() {
     }
   }, [loadPins]);
 
-  // The repository list is the whole point of this screen, so it loads on
-  // arrival instead of waiting to be asked for.
+  // The repository list is the whole point of this screen, so it loads on arrival.
   useEffect(() => {
     void load();
   }, [load]);
@@ -126,12 +127,7 @@ export function TestApps() {
     }
   }
 
-  async function togglePin(
-    kind: PinKind,
-    projectId: number,
-    projectPath: string,
-    branch?: string,
-  ) {
+  async function togglePin(kind: PinKind, projectId: number, projectPath: string, branch?: string) {
     const key = kind === "repository" ? repoKey(projectId) : branchKey(projectId, branch ?? "");
     const wasPinned = pins.has(key);
 
@@ -158,7 +154,6 @@ export function TestApps() {
 
       if (!response.ok) throw new Error("Pin update was rejected");
     } catch (err) {
-      // Roll back on failure.
       setPins((current) => {
         const next = new Set(current);
         if (wasPinned) next.add(key);
@@ -178,9 +173,7 @@ export function TestApps() {
     setExpanded(projectId);
     setSelectedBranch(null);
 
-    if (!branches[projectId]) {
-      await loadBranches(projectId);
-    }
+    if (!branches[projectId]) await loadBranches(projectId);
   }
 
   const visibleProjects = useMemo(() => {
@@ -189,9 +182,7 @@ export function TestApps() {
     const matching =
       needle === ""
         ? projects
-        : projects.filter((project) =>
-            project.pathWithNamespace.toLowerCase().includes(needle),
-          );
+        : projects.filter((project) => project.pathWithNamespace.toLowerCase().includes(needle));
 
     return pinnedFirst(matching, (project) => pins.has(repoKey(project.id)));
   }, [projects, filter, pins]);
@@ -204,137 +195,173 @@ export function TestApps() {
   return (
     <>
       <div className="toolbar">
-        <button type="button" onClick={() => void load()} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
+        <label className="search-field">
+          <span className="search-icon">
+            <Icon name="search" size={18} />
+          </span>
+          <input
+            type="search"
+            placeholder="Filter repositories by path"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            aria-label="Filter repositories"
+          />
+        </label>
+        <button
+          type="button"
+          className="md-button tonal"
+          onClick={() => void load()}
+          disabled={loading}
+        >
+          {loading ? <span className="spinner" /> : <Icon name="refresh" size={18} />}
+          Refresh
         </button>
         {projects && !loading && (
-          <span className="muted">
-            {projects.length} project{projects.length === 1 ? "" : "s"}
+          <span className="md-body-sm faint">
+            {projects.length} repositor{projects.length === 1 ? "y" : "ies"}
             {pinnedRepoCount > 0 ? ` · ${pinnedRepoCount} pinned` : ""}
           </span>
         )}
       </div>
 
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <p className="snackbar error" role="alert">
+          <Icon name="warning" size={18} />
+          {error}
+        </p>
+      )}
 
-      {!projects && loading && <p className="muted">Loading repositories…</p>}
+      {!projects && loading && (
+        <div className="stack" aria-busy="true">
+          <span className="skeleton" style={{ height: 64 }} />
+          <span className="skeleton" style={{ height: 64 }} />
+          <span className="skeleton" style={{ height: 64 }} />
+        </div>
+      )}
 
-      {projects && (
-        <>
-          <input
-            className="repos-filter"
-            placeholder="Filter by path…"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-          />
+      {projects && visibleProjects.length === 0 && (
+        <div className="empty-state">
+          <Bird state="not-found" size={104} />
+          <h3 className="md-title">Nothing matches that filter</h3>
+          <p className="md-body">
+            {projects.length === 0
+              ? "The GitLab connection returned no repositories. Check the token in Settings."
+              : "No repository path contains that text. Clear the search to see them all."}
+          </p>
+          {filter !== "" && (
+            <button type="button" className="md-button tonal" onClick={() => setFilter("")}>
+              Clear the search
+            </button>
+          )}
+        </div>
+      )}
 
-          {visibleProjects.length === 0 ? (
-            <p className="muted">No projects match that filter.</p>
-          ) : (
-            <ul className="repos">
-              {visibleProjects.map((project) => {
-                const isPinned = pins.has(repoKey(project.id));
-                const isExpanded = expanded === project.id;
-                const projectBranches = branches[project.id];
+      {visibleProjects.length > 0 && (
+        <ul className="list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+          {visibleProjects.map((project) => {
+            const isPinned = pins.has(repoKey(project.id));
+            const isExpanded = expanded === project.id;
+            const projectBranches = branches[project.id];
 
-                return (
-                  <li key={project.id}>
-                    <div className="repo-row">
-                      <button
-                        type="button"
-                        className={isPinned ? "pin pinned" : "pin"}
-                        title={isPinned ? "Unpin repository" : "Pin repository"}
-                        aria-label={isPinned ? "Unpin repository" : "Pin repository"}
-                        onClick={() =>
-                          void togglePin("repository", project.id, project.pathWithNamespace)
-                        }
-                      >
-                        {isPinned ? "★" : "☆"}
-                      </button>
+            return (
+              <li key={project.id} className="card">
+                <div className="row">
+                  <button
+                    type="button"
+                    className={isPinned ? "md-button icon" : "md-button icon faint"}
+                    style={isPinned ? { color: "var(--warning)" } : undefined}
+                    title={isPinned ? "Unpin repository" : "Pin repository"}
+                    aria-label={isPinned ? "Unpin repository" : "Pin repository"}
+                    aria-pressed={isPinned}
+                    onClick={() => void togglePin("repository", project.id, project.pathWithNamespace)}
+                  >
+                    <Icon name="star" size={18} />
+                  </button>
 
-                      <a
-                        className="repo-path"
-                        href={project.webUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {project.pathWithNamespace}
-                      </a>
+                  <span className="list-item-main">
+                    <a className="repo-path" href={project.webUrl} target="_blank" rel="noreferrer">
+                      {project.pathWithNamespace}
+                    </a>
+                    <span className="list-item-sub">
+                      {project.visibility} · {project.defaultBranch ?? "no default branch"} · last
+                      activity {new Date(project.lastActivityAt).toLocaleDateString()}
+                    </span>
+                  </span>
 
-                      <span className="muted repo-meta">
-                        {project.visibility} · {project.defaultBranch ?? "no default branch"} ·{" "}
-                        {new Date(project.lastActivityAt).toLocaleDateString()}
-                      </span>
+                  <button
+                    type="button"
+                    className="md-button tonal small"
+                    onClick={() => void toggleExpanded(project.id)}
+                    aria-expanded={isExpanded}
+                  >
+                    <Icon name={isExpanded ? "chevronDown" : "branch"} size={16} />
+                    {isExpanded ? "Hide branches" : "Branches"}
+                  </button>
+                </div>
 
-                      <button
-                        type="button"
-                        className="link-button"
-                        onClick={() => void toggleExpanded(project.id)}
-                      >
-                        {isExpanded ? "Hide branches" : "Branches"}
-                      </button>
-                    </div>
+                {isExpanded && (
+                  <div className="branches stack">
+                    {loadingBranches === project.id && (
+                      <div className="stack" aria-busy="true">
+                        <span className="skeleton" style={{ width: "45%" }} />
+                        <span className="skeleton" style={{ width: "35%" }} />
+                      </div>
+                    )}
 
-                    {isExpanded && (
-                      <div className="branches">
-                        {loadingBranches === project.id && (
-                          <p className="muted">Loading branches…</p>
-                        )}
-                        {branchError && <p className="error">{branchError}</p>}
+                    {branchError && (
+                      <p className="snackbar error" role="alert">
+                        <Icon name="warning" size={18} />
+                        {branchError}
+                      </p>
+                    )}
 
-                        {projectBranches && projectBranches.length === 0 && (
-                          <p className="muted">This repository has no branches.</p>
-                        )}
+                    {projectBranches && projectBranches.length === 0 && (
+                      <p className="md-body-sm muted">This repository has no branches.</p>
+                    )}
 
-                        {projectBranches && projectBranches.length > 0 && (
-                          <ul>
-                            {pinnedFirst(projectBranches, (branch) =>
-                              pins.has(branchKey(project.id, branch.name)),
-                            ).map((branch) => {
-                              const branchPinned = pins.has(branchKey(project.id, branch.name));
+                    {projectBranches && projectBranches.length > 0 && (
+                      <>
+                        <p className="md-body-sm faint">Pick the branch to test</p>
+                        <ul className="chip-row" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                          {pinnedFirst(projectBranches, (branch) =>
+                            pins.has(branchKey(project.id, branch.name)),
+                          ).map((branch) => {
+                            const branchPinned = pins.has(branchKey(project.id, branch.name));
+                            const selected = selectedBranch === branch.name;
 
-                              return (
-                                <li key={branch.name}>
-                                  <button
-                                    type="button"
-                                    className={branchPinned ? "pin pinned" : "pin"}
-                                    title={branchPinned ? "Unpin branch" : "Pin branch"}
-                                    aria-label={branchPinned ? "Unpin branch" : "Pin branch"}
-                                    onClick={() =>
-                                      void togglePin(
-                                        "branch",
-                                        project.id,
-                                        project.pathWithNamespace,
-                                        branch.name,
-                                      )
-                                    }
-                                  >
-                                    {branchPinned ? "★" : "☆"}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={
-                                      selectedBranch === branch.name
-                                        ? "branch-select selected"
-                                        : "branch-select"
-                                    }
-                                    aria-pressed={selectedBranch === branch.name}
-                                    onClick={() => setSelectedBranch(branch.name)}
-                                  >
-                                    {branch.name}
-                                  </button>
-                                  {branch.default && <span className="tag">default</span>}
-                                  {branch.protected && <span className="tag">protected</span>}
-                                  {branch.lastCommitAt && (
-                                    <span className="muted branch-date">
-                                      {new Date(branch.lastCommitAt).toLocaleDateString()}
-                                    </span>
-                                  )}
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        )}
+                            return (
+                              <li key={branch.name} className="row" style={{ gap: 4 }}>
+                                <button
+                                  type="button"
+                                  className={selected ? "chip selected" : "chip"}
+                                  aria-pressed={selected}
+                                  onClick={() => setSelectedBranch(branch.name)}
+                                >
+                                  {branch.default && <Icon name="star" size={13} />}
+                                  {branch.name}
+                                  {branch.protected && <span className="faint">· protected</span>}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="md-button icon"
+                                  style={branchPinned ? { color: "var(--warning)" } : undefined}
+                                  aria-label={branchPinned ? "Unpin branch" : "Pin branch"}
+                                  aria-pressed={branchPinned}
+                                  onClick={() =>
+                                    void togglePin(
+                                      "branch",
+                                      project.id,
+                                      project.pathWithNamespace,
+                                      branch.name,
+                                    )
+                                  }
+                                >
+                                  <Icon name="star" size={15} />
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
 
                         {selectedBranch && (
                           <BranchCheckPanel
@@ -344,18 +371,18 @@ export function TestApps() {
                             branch={selectedBranch}
                           />
                         )}
-                      </div>
+                      </>
                     )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
-          {truncated && (
-            <p className="muted">Showing the most recently active projects only.</p>
-          )}
-        </>
+      {truncated && (
+        <p className="md-body-sm muted">Showing the most recently active projects only.</p>
       )}
     </>
   );

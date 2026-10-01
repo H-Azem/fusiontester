@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { Bird } from "./bird";
+import { Icon } from "./icons";
 import { RunConfiguration } from "./run-configuration";
 
 type BranchCheck = {
@@ -21,8 +23,9 @@ type MaestroTest = {
 };
 
 /**
- * Checks whether a branch is testable and, when it is, offers the test list.
- * Mount with a key of `${projectId}:${branch}` so switching branch re-checks.
+ * A branch is only testable when it is a Flutter app with Maestro flows, so those
+ * two facts are checked before anything else is offered. Mount with a key of
+ * `${projectId}:${branch}` so switching branch re-checks.
  */
 export function BranchCheckPanel({
   projectId,
@@ -62,9 +65,7 @@ export function BranchCheckPanel({
 
         setCheck(data);
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : String(err));
-        }
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       } finally {
         if (!cancelled) setChecking(false);
       }
@@ -101,61 +102,87 @@ export function BranchCheckPanel({
     }
   }
 
-  return (
-    <div className="branch-check">
-      <p className="check-title">
-        Selected branch <strong>{branch}</strong>
+  if (checking) {
+    return (
+      <div className="stack" aria-busy="true">
+        <span className="skeleton" style={{ width: "55%" }} />
+        <span className="skeleton" style={{ width: "40%" }} />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <p className="snackbar error" role="alert">
+        <Icon name="warning" size={18} />
+        {error}
       </p>
+    );
+  }
 
-      {checking && <p className="muted">Checking this branch…</p>}
-      {error && <p className="error">{error}</p>}
+  if (!check) return null;
 
-      {check && (
-        <>
-          <ul className="checks">
-            <li className={check.isFlutterApp ? "check ok" : "check fail"}>
-              <span className="mark">{check.isFlutterApp ? "✓" : "✗"}</span>
-              <span>
-                Flutter application
-                <br />
-                <span className="muted">{check.isFlutterAppReason}</span>
-              </span>
-            </li>
-            <li className={check.hasMaestroFlows ? "check ok" : "check fail"}>
-              <span className="mark">{check.hasMaestroFlows ? "✓" : "✗"}</span>
-              <span>
-                .maestro/flows present
-                <br />
-                <span className="muted">{check.hasMaestroFlowsReason}</span>
-              </span>
-            </li>
-          </ul>
+  return (
+    <div className="stack">
+      <ul className="check-list">
+        <li className={check.isFlutterApp ? "check ok" : "check fail"}>
+          <span className="mark" aria-hidden="true">
+            <Icon name={check.isFlutterApp ? "check" : "close"} size={13} />
+          </span>
+          <span>
+            <span className="md-title-sm">Flutter application</span>
+            <br />
+            <span className="md-body-sm muted">{check.isFlutterAppReason}</span>
+          </span>
+        </li>
+        <li className={check.hasMaestroFlows ? "check ok" : "check fail"}>
+          <span className="mark" aria-hidden="true">
+            <Icon name={check.hasMaestroFlows ? "check" : "close"} size={13} />
+          </span>
+          <span>
+            <span className="md-title-sm">.maestro/flows present</span>
+            <br />
+            <span className="md-body-sm muted">{check.hasMaestroFlowsReason}</span>
+          </span>
+        </li>
+      </ul>
 
-          {check.canContinue && !tests && (
-            <button type="button" onClick={() => void loadTests()} disabled={loadingTests}>
-              {loadingTests ? "Loading tests…" : "Continue"}
-            </button>
-          )}
-
-          {!check.canContinue && (
-            <p className="muted">
-              Both conditions must pass before this branch can be tested.
-            </p>
-          )}
-        </>
+      {!check.canContinue && (
+        <p className="md-body-sm muted">
+          Both conditions have to pass before this branch can be tested. Push the missing
+          piece to the branch and check again.
+        </p>
       )}
 
-      {tests && (
-        tests.length === 0 ? (
-          <p className="muted">No test folders found.</p>
-        ) : (
-          <RunConfiguration
-            projectId={projectId}
-            projectPath={projectPath}
-            branch={branch}
-            tests={tests}
-          />
-        )
+      {check.canContinue && !tests && (
+        <button
+          type="button"
+          className="md-button tonal"
+          onClick={() => void loadTests()}
+          disabled={loadingTests}
+        >
+          {loadingTests ? <span className="spinner" /> : <Icon name="chevronRight" size={18} />}
+          {loadingTests ? "Reading flows…" : "Continue"}
+        </button>
+      )}
+
+      {tests && tests.length === 0 && (
+        <div className="empty-state">
+          <Bird state="not-found" size={88} />
+          <h3 className="md-title">No flows found</h3>
+          <p className="md-body">
+            This branch has a .maestro folder but no flow folders inside it yet.
+          </p>
+        </div>
+      )}
+
+      {tests && tests.length > 0 && (
+        <RunConfiguration
+          projectId={projectId}
+          projectPath={projectPath}
+          branch={branch}
+          tests={tests}
+        />
       )}
     </div>
   );

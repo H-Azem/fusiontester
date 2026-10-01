@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { Icon } from "@/components/icons";
+import { StatusChip, relativeTime } from "@/components/status";
+
 type AiConfig = {
   configured: boolean;
   openaiBaseUrl?: string;
@@ -22,9 +25,9 @@ type TestResult = {
 };
 
 /**
- * Credentials for the AI test lane: an OpenAI-compatible endpoint that chooses
- * actions from the semantics tree, and a jev token that verifies each step with
- * typed answers.
+ * Credentials for the AI lane: an OpenAI-compatible endpoint chooses actions from
+ * the accessibility tree, and a jev token verifies each step with typed answers.
+ * No screenshot leaves the machine while a test runs.
  */
 export function AiSettings() {
   const [config, setConfig] = useState<AiConfig | null>(null);
@@ -86,7 +89,7 @@ export function AiSettings() {
 
       setOpenaiToken("");
       setJevToken("");
-      setNotice("Saved. Both tokens are encrypted at rest and will not be shown again.");
+      setNotice("Saved. Both tokens are encrypted at rest.");
       await load();
     } finally {
       setBusy(null);
@@ -127,139 +130,163 @@ export function AiSettings() {
   return (
     <section className="panel">
       <div className="panel-head">
-        <h2>AI test</h2>
-        <span className="muted">
-          Model chooses the actions, jev verifies each step
-        </span>
+        <div>
+          <h2>AI test lane</h2>
+          <p className="panel-sub">
+            The model picks the next action, jev checks each step. Screenshots are only
+            captured when a step fails, and analysed then.
+          </p>
+        </div>
+        <StatusChip
+          status={config?.configured ? (config.lastVerifyOk === false ? "failed" : "passed") : "queued"}
+          label={config?.configured ? (config.lastVerifyOk === false ? "check failed" : "configured") : "not set"}
+        />
       </div>
 
       {config?.configured && (
-        <p className="muted">
+        <p className="md-body-sm muted">
           Model key {config.openaiTokenHint} · jev token {config.jevTokenHint}
-          {config.lastVerifiedAt
-            ? ` · last checked ${new Date(config.lastVerifiedAt).toLocaleString()} (${
-                config.lastVerifyOk ? "ok" : "failed"
-              })`
-            : ""}
+          {config.lastVerifiedAt ? ` · checked ${relativeTime(config.lastVerifiedAt)}` : ""}
         </p>
       )}
 
-      <p className="muted">
-        Actions are chosen from the app&apos;s accessibility tree, so no screenshots are
-        sent while a test runs. A screenshot is captured only when a step fails, and is
-        analysed then.
-      </p>
+      <form className="stack" onSubmit={handleSave}>
+        <div className="split">
+          <div className="stack">
+            <h3 className="md-title-sm">Model endpoint</h3>
 
-      <form onSubmit={handleSave}>
-        <label htmlFor="openaiBaseUrl">Model base URL</label>
-        <input
-          id="openaiBaseUrl"
-          placeholder="https://api.openai.com/v1"
-          value={openaiBaseUrl}
-          onChange={(event) => setOpenaiBaseUrl(event.target.value)}
-          required
-        />
+            <label className="field">
+              <span className="field-label">Base URL</span>
+              <input
+                placeholder="https://api.openai.com/v1"
+                value={openaiBaseUrl}
+                onChange={(event) => setOpenaiBaseUrl(event.target.value)}
+                required
+              />
+              <span className="hint">Any OpenAI-compatible provider works.</span>
+            </label>
 
-        <label htmlFor="openaiModel">Model</label>
-        <input
-          id="openaiModel"
-          placeholder="gpt-4o-mini"
-          value={openaiModel}
-          onChange={(event) => setOpenaiModel(event.target.value)}
-          spellCheck={false}
-          required
-        />
+            <label className="field">
+              <span className="field-label">Model</span>
+              <input
+                placeholder="gpt-4o-mini"
+                value={openaiModel}
+                onChange={(event) => setOpenaiModel(event.target.value)}
+                spellCheck={false}
+                required
+              />
+            </label>
 
-        <label htmlFor="openaiToken">
-          API key{" "}
-          <span className="muted">
-            any OpenAI-compatible provider
-            {config?.configured ? " · leave blank to keep the stored key" : ""}
-          </span>
-        </label>
-        <input
-          id="openaiToken"
-          type="password"
-          autoComplete="off"
-          placeholder={config?.configured ? "unchanged" : "sk-…"}
-          value={openaiToken}
-          onChange={(event) => setOpenaiToken(event.target.value)}
-        />
+            <label className="field">
+              <span className="field-label">API key</span>
+              <input
+                type="password"
+                autoComplete="off"
+                placeholder={config?.configured ? "unchanged" : "sk-…"}
+                value={openaiToken}
+                onChange={(event) => setOpenaiToken(event.target.value)}
+              />
+            </label>
+          </div>
 
-        <label htmlFor="jevBaseUrl">jev base URL</label>
-        <input
-          id="jevBaseUrl"
-          placeholder="https://api.typesafe.ai"
-          value={jevBaseUrl}
-          onChange={(event) => setJevBaseUrl(event.target.value)}
-          required
-        />
+          <div className="stack">
+            <h3 className="md-title-sm">jev verification</h3>
 
-        <label htmlFor="jevToken">
-          jev token{" "}
-          <span className="muted">
-            TypeSafe API key, used for the typed checks
-            {config?.configured ? " · leave blank to keep the stored token" : ""}
-          </span>
-        </label>
-        <input
-          id="jevToken"
-          type="password"
-          autoComplete="off"
-          placeholder={config?.configured ? "unchanged" : "ts-…"}
-          value={jevToken}
-          onChange={(event) => setJevToken(event.target.value)}
-        />
+            <label className="field">
+              <span className="field-label">Base URL</span>
+              <input
+                placeholder="https://api.typesafe.ai"
+                value={jevBaseUrl}
+                onChange={(event) => setJevBaseUrl(event.target.value)}
+                required
+              />
+            </label>
 
-        <label htmlFor="maxSteps">
-          Maximum steps <span className="muted">per AI test</span>
-        </label>
-        <input
-          id="maxSteps"
-          type="number"
-          min={3}
-          max={80}
-          value={maxSteps}
-          onChange={(event) => setMaxSteps(event.target.value)}
-        />
+            <label className="field">
+              <span className="field-label">jev token</span>
+              <input
+                type="password"
+                autoComplete="off"
+                placeholder={config?.configured ? "unchanged" : "ts-…"}
+                value={jevToken}
+                onChange={(event) => setJevToken(event.target.value)}
+              />
+              <span className="hint">TypeSafe API key used for the typed checks.</span>
+            </label>
 
-        {error && <p className="error">{error}</p>}
-        {notice && <p className="success">{notice}</p>}
+            <label className="field">
+              <span className="field-label">Maximum steps per test</span>
+              <input
+                type="number"
+                min={3}
+                max={80}
+                value={maxSteps}
+                onChange={(event) => setMaxSteps(event.target.value)}
+              />
+            </label>
+          </div>
+        </div>
 
-        <div className="actions">
-          <button type="submit" disabled={busy !== null}>
-            {busy === "save" ? "Saving…" : "Save"}
+        {error && (
+          <p className="snackbar error" role="alert">
+            <Icon name="warning" size={18} />
+            {error}
+          </p>
+        )}
+
+        {notice && (
+          <p className="snackbar success" role="status">
+            <Icon name="check" size={18} />
+            {notice}
+          </p>
+        )}
+
+        <div className="row">
+          <button type="submit" className="md-button filled" disabled={busy !== null}>
+            {busy === "save" ? <span className="spinner" /> : <Icon name="check" size={18} />}
+            {busy === "save" ? "Saving…" : "Save AI settings"}
           </button>
-          <button type="button" onClick={() => void handleTest()} disabled={busy !== null}>
-            {busy === "test" ? "Testing…" : "Test connection"}
+          <button
+            type="button"
+            className="md-button tonal"
+            onClick={() => void handleTest()}
+            disabled={busy !== null}
+          >
+            {busy === "test" ? <span className="spinner" /> : <Icon name="live" size={18} />}
+            {busy === "test" ? "Testing…" : "Test both"}
           </button>
         </div>
       </form>
 
       {result && (
-        <section>
-          <h2>Test result</h2>
+        <div className="card filled stack">
+          <div className="row">
+            <StatusChip
+              status={result.openai.ok ? "passed" : "failed"}
+              label={`model ${result.openai.ok ? "ready" : "failed"}`}
+            />
+            <StatusChip
+              status={result.jev.ok ? "passed" : "failed"}
+              label={`jev ${result.jev.ok ? "ready" : "failed"}`}
+            />
+            <StatusChip status={result.ok ? "passed" : "failed"} label={result.ok ? "ready" : "not ready"} />
+          </div>
 
-          <ul className="scopes">
-            <li className={result.openai.ok ? "scope" : "scope missing"}>
-              model {result.openai.ok ? "ready" : "failed"}
-            </li>
-            <li className={result.jev.ok ? "scope" : "scope missing"}>
-              jev {result.jev.ok ? "ready" : "failed"}
-            </li>
-          </ul>
-
-          <pre>
-            {[
-              `model base    ${openaiBaseUrl || config?.openaiBaseUrl || "—"}`,
-              `model         ${result.openai.model ?? (openaiModel || "—")}`,
-              `model check   ${result.openai.ok ? "ok" : "failed"} — ${result.openai.detail}`,
-              `jev base      ${jevBaseUrl || config?.jevBaseUrl || "—"}`,
-              `jev check     ${result.jev.ok ? "ok" : "failed"} — ${result.jev.detail}`,
-              `overall       ${result.ok ? "ready" : "not ready"}`,
-            ].join("\n")}
-          </pre>
-        </section>
+          <dl className="meta-grid">
+            <div>
+              <dt>Model</dt>
+              <dd>{result.openai.model ?? (openaiModel || "—")}</dd>
+            </div>
+            <div>
+              <dt>Model check</dt>
+              <dd>{result.openai.detail}</dd>
+            </div>
+            <div>
+              <dt>jev check</dt>
+              <dd>{result.jev.detail}</dd>
+            </div>
+          </dl>
+        </div>
       )}
     </section>
   );

@@ -26,5 +26,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|login|_next/static|_next/image|favicon.ico).*)"],
+  // Static assets never need a session: the mascot, the app icon Next generates
+  // from app/icon.png, and the framework's own bundles.
+  matcher: ["/((?!api|login|bird|icon|_next/static|_next/image|favicon.ico).*)"],
 };

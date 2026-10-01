@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { Icon } from "./icons";
+
 type MaestroTest = {
   name: string;
   displayName: string;
@@ -15,23 +17,26 @@ type RunKind = "maestro" | "ai";
 type Orientation = "horizontal" | "vertical";
 type Platform = "web" | "android";
 
-const RUN_KINDS: Array<{ id: RunKind; label: string }> = [
-  { id: "maestro", label: "Maestro" },
-  { id: "ai", label: "AI test" },
+const RUN_KINDS: Array<{ id: RunKind; label: string; hint: string }> = [
+  { id: "maestro", label: "Maestro flows", hint: "drives the recorded journeys" },
+  { id: "ai", label: "AI test", hint: "model picks the actions (web lane only)" },
+];
+
+const PLATFORMS: Array<{ id: Platform; label: string; hint: string }> = [
+  { id: "android", label: "Android device", hint: "redroid emulator" },
+  { id: "web", label: "Web", hint: "browser build" },
 ];
 
 const ORIENTATIONS: Array<{ id: Orientation; label: string }> = [
-  { id: "horizontal", label: "Horizontal" },
-  { id: "vertical", label: "Vertical" },
+  { id: "horizontal", label: "Landscape" },
+  { id: "vertical", label: "Portrait" },
 ];
 
-// The device lane drives the redroid container, which is what the apps were
-// written for; the web lane stays for apps that need the browser build.
-const PLATFORMS: Array<{ id: Platform; label: string; hint: string }> = [
-  { id: "web", label: "Web", hint: "browser build" },
-  { id: "android", label: "Android device", hint: "redroid" },
-];
-
+/**
+ * Starting a run is a decision, not a form to scroll past, so it lives in a
+ * Material sheet: the repository and branch stay visible behind it, and on a phone
+ * it rises from the bottom into the thumb zone.
+ */
 export function RunConfiguration({
   projectId,
   projectPath,
@@ -44,19 +49,13 @@ export function RunConfiguration({
   tests: MaestroTest[];
 }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [selectedTests, setSelectedTests] = useState<Set<string>>(() => new Set<string>());
-  const [runKinds, setRunKinds] = useState<Set<RunKind>>(
-    () => new Set<RunKind>(["maestro"]),
-  );
-  // Development is always included, so only production is a real choice here.
+  const [runKinds, setRunKinds] = useState<Set<RunKind>>(() => new Set<RunKind>(["maestro"]));
   const [includeProduction, setIncludeProduction] = useState(false);
-  // Remembered per repository, so the next run opens with the same choice.
   const [orientation, setOrientation] = useState<Orientation>("horizontal");
-  const [platform, setPlatform] = useState<Platform>("web");
-  // A frame of the device every couple of seconds while the run goes. Only the
-  // device lane can be watched this way, so it is off unless asked for.
-  const [live, setLive] = useState(false);
-  // Extra --dart-define values this app needs; also remembered per repository.
+  const [platform, setPlatform] = useState<Platform>("android");
+  const [live, setLive] = useState(true);
   const [dartDefines, setDartDefines] = useState("");
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -84,6 +83,15 @@ export function RunConfiguration({
     };
   }, [projectId]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   function toggleTest(test: MaestroTest) {
     setSelectedTests((current) => {
       if (current.has(test.name)) {
@@ -93,9 +101,7 @@ export function RunConfiguration({
       }
 
       // A whole-suite test supersedes any individual selection.
-      if (test.exclusive) {
-        return new Set([test.name]);
-      }
+      if (test.exclusive) return new Set([test.name]);
 
       const next = new Set(current);
       next.add(test.name);
@@ -107,7 +113,6 @@ export function RunConfiguration({
     setRunKinds((current) => {
       const next = new Set(current);
       if (next.has(kind)) {
-        // At least one runner must stay selected.
         if (next.size === 1) return current;
         next.delete(kind);
       } else {
@@ -131,9 +136,7 @@ export function RunConfiguration({
           branch,
           tests: [...selectedTests],
           runKinds: [...runKinds],
-          environments: includeProduction
-            ? ["development", "production"]
-            : ["development"],
+          environments: includeProduction ? ["development", "production"] : ["development"],
           orientation,
           platform,
           live: platform === "android" && live,
@@ -158,158 +161,210 @@ export function RunConfiguration({
   }
 
   const summary = [
-    `${selectedTests.size} test${selectedTests.size === 1 ? "" : "s"}`,
-    RUN_KINDS.filter((kind) => runKinds.has(kind.id))
-      .map((kind) => kind.label)
-      .join(" + "),
-    includeProduction ? "Development + Production" : "Development",
-    PLATFORMS.find((item) => item.id === platform)?.label ?? "Web",
-    orientation === "horizontal" ? "Horizontal" : "Vertical",
-    platform === "android" && live ? "live view" : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+    selectedTests.size === 0 ? "no tests picked" : `${selectedTests.size} selected`,
+    runKinds.has("ai") ? "maestro + ai" : "maestro",
+    platform === "android" ? "device" : "web",
+  ].join(" · ");
 
   return (
-    <div className="run-config">
-      <div className="tests">
-        <h3>
-          Tests <span className="muted">{summary}</span>
-        </h3>
+    <>
+      <div className="toolbar">
+        <button type="button" className="md-button filled" onClick={() => setOpen(true)}>
+          <Icon name="add" size={18} />
+          Configure and start
+        </button>
+        <span className="faint md-body-sm">{summary}</span>
+      </div>
 
-        <ul>
-          {tests.map((test) => {
-            const isSelected = selectedTests.has(test.name);
-            const isDisabled = exclusiveSelected && !test.exclusive;
+      {open && (
+        <div
+          className="scrim"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Start a test"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setOpen(false);
+          }}
+        >
+          <div className="sheet">
+            <div className="sheet-head">
+              <div>
+                <h2 className="md-title-lg">Start a test</h2>
+                <p className="md-body-sm muted">
+                  {projectPath} · <span className="mono">{branch}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                className="md-button icon"
+                aria-label="Close"
+                onClick={() => setOpen(false)}
+              >
+                <Icon name="close" size={20} />
+              </button>
+            </div>
 
-            return (
-              <li key={test.name}>
-                <label className={isDisabled ? "test-option disabled" : "test-option"}>
+            <div className="sheet-body">
+              <div className="stack">
+                <h3 className="md-title-sm">1 · Which tests</h3>
+                <ul className="tests list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                  {tests.map((test) => {
+                    const isSelected = selectedTests.has(test.name);
+                    const isDisabled = exclusiveSelected && !test.exclusive;
+                    return (
+                      <li key={test.name}>
+                        <label className={isDisabled ? "choice disabled" : "choice"}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            disabled={isDisabled}
+                            onChange={() => toggleTest(test)}
+                          />
+                          <span className="list-item-main">
+                            <span className="list-item-title">{test.displayName}</span>
+                            <span className="list-item-sub mono">{test.path}</span>
+                          </span>
+                          {test.exclusive && <span className="status queued">runs everything</span>}
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {exclusiveSelected && (
+                  <p className="md-body-sm muted">
+                    A whole-suite test covers every flow, so the individual tests are disabled
+                    while it is selected.
+                  </p>
+                )}
+              </div>
+
+              <div className="stack">
+                <h3 className="md-title-sm">2 · How</h3>
+
+                <div className="chip-row" role="group" aria-label="Runners">
+                  {RUN_KINDS.map((kind) => (
+                    <button
+                      key={kind.id}
+                      type="button"
+                      className={runKinds.has(kind.id) ? "chip selected" : "chip"}
+                      aria-pressed={runKinds.has(kind.id)}
+                      onClick={() => toggleRunKind(kind.id)}
+                      title={kind.hint}
+                    >
+                      {kind.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="chip-row" role="radiogroup" aria-label="Where to run">
+                  {PLATFORMS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={platform === item.id}
+                      className={platform === item.id ? "chip selected" : "chip"}
+                      onClick={() => setPlatform(item.id)}
+                    >
+                      <Icon name={item.id === "android" ? "device" : "bolt"} size={16} />
+                      {item.label}
+                      <span className="faint">{item.hint}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="chip-row" role="radiogroup" aria-label="Orientation">
+                  {ORIENTATIONS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={orientation === item.id}
+                      className={orientation === item.id ? "chip selected" : "chip"}
+                      onClick={() => setOrientation(item.id)}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                <label className="switch">
                   <input
                     type="checkbox"
-                    checked={isSelected}
-                    disabled={isDisabled}
-                    onChange={() => toggleTest(test)}
+                    checked={live}
+                    disabled={platform !== "android"}
+                    onChange={() => setLive((current) => !current)}
                   />
-                  <span className="test-name">{test.displayName}</span>
-                  {test.exclusive && <span className="tag">runs everything</span>}
+                  <span>
+                    <span className="md-title-sm">Live device view</span>
+                    <br />
+                    <span className="md-body-sm muted">
+                      {platform === "android"
+                        ? "a frame every 2.5s while the test runs"
+                        : "only the device lane can be watched"}
+                    </span>
+                  </span>
                 </label>
-                <span className="muted test-path">{test.path}</span>
-              </li>
-            );
-          })}
-        </ul>
 
-        {exclusiveSelected && (
-          <p className="muted">
-            A whole-suite test covers every flow, so individual tests are disabled while it is
-            selected.
-          </p>
-        )}
-      </div>
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={includeProduction}
+                    onChange={() => setIncludeProduction((current) => !current)}
+                  />
+                  <span>
+                    <span className="md-title-sm">Also run production environment</span>
+                    <br />
+                    <span className="md-body-sm muted">development always runs</span>
+                  </span>
+                </label>
+              </div>
 
-      <div className="options">
-        <fieldset>
-          <legend>Run with</legend>
-          {RUN_KINDS.map((kind) => (
-            <label key={kind.id}>
-              <input
-                type="checkbox"
-                checked={runKinds.has(kind.id)}
-                onChange={() => toggleRunKind(kind.id)}
-              />
-              <span>{kind.label}</span>
-            </label>
-          ))}
-        </fieldset>
+              <div className="stack">
+                <h3 className="md-title-sm">3 · Build details</h3>
+                <label className="field">
+                  <span className="field-label">Extra build defines</span>
+                  <input
+                    value={dartDefines}
+                    onChange={(event) => setDartDefines(event.target.value)}
+                    placeholder="ENABLE_DEV_TOOLS=true"
+                    spellCheck={false}
+                  />
+                  <span className="hint">
+                    Passed to flutter build as --dart-define. Remembered per repository.
+                  </span>
+                </label>
+              </div>
 
-        <fieldset>
-          <legend>Environment</legend>
-          <label className="locked">
-            <input type="checkbox" checked disabled readOnly />
-            <span>Development</span>
-            <span className="muted">always</span>
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={includeProduction}
-              onChange={() => setIncludeProduction((current) => !current)}
-            />
-            <span>Production</span>
-          </label>
-        </fieldset>
+              {startError && (
+                <p className="snackbar error" role="alert">
+                  <Icon name="warning" size={18} />
+                  {startError}
+                </p>
+              )}
+            </div>
 
-        <fieldset>
-          <legend>Run on</legend>
-          {PLATFORMS.map((item) => (
-            <label key={item.id}>
-              <input
-                type="radio"
-                name={`platform-${projectId}`}
-                checked={platform === item.id}
-                onChange={() => setPlatform(item.id)}
-              />
-              <span>{item.label}</span>
-              <span className="muted">{item.hint}</span>
-            </label>
-          ))}
-        </fieldset>
+            <div className="sheet-actions">
+              <button type="button" className="md-button text" onClick={() => setOpen(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="md-button filled"
+                onClick={() => void startTest()}
+                disabled={starting || selectedTests.size === 0}
+              >
+                {starting ? <span className="spinner" /> : <Icon name="runs" size={18} />}
+                {starting ? "Queueing…" : "Start test"}
+              </button>
+            </div>
 
-        <fieldset>
-          <legend>Orientation</legend>
-          {ORIENTATIONS.map((item) => (
-            <label key={item.id}>
-              <input
-                type="radio"
-                name={`orientation-${projectId}`}
-                checked={orientation === item.id}
-                onChange={() => setOrientation(item.id)}
-              />
-              <span>{item.label}</span>
-            </label>
-          ))}
-        </fieldset>
-
-        <fieldset>
-          <legend>Live view</legend>
-          <label>
-            <input
-              type="checkbox"
-              checked={live}
-              disabled={platform !== "android"}
-              onChange={() => setLive((current) => !current)}
-            />
-            <span>A frame every 2.5s</span>
-          </label>
-          {platform !== "android" && <span className="muted">device lane only</span>}
-        </fieldset>
-
-        <label className="field">
-          <span>Extra build defines</span>
-          <input
-            value={dartDefines}
-            onChange={(event) => setDartDefines(event.target.value)}
-            placeholder="ENABLE_DEV_TOOLS=true"
-            spellCheck={false}
-          />
-        </label>
-      </div>
-
-      <div className="actions">
-        <button
-          type="button"
-          onClick={() => void startTest()}
-          disabled={starting || selectedTests.size === 0}
-        >
-          {starting ? "Starting…" : "Start test"}
-        </button>
-        {selectedTests.size === 0 && (
-          <span className="muted">Select at least one test to run.</span>
-        )}
-      </div>
-
-      {startError && <p className="error">{startError}</p>}
-    </div>
+            {selectedTests.size === 0 && (
+              <p className="md-body-sm muted">Pick at least one test to run.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
