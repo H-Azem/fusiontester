@@ -18,7 +18,6 @@ const NAV = [
   { href: "/runs", label: "Test runs", icon: "runs" },
   { href: "/automation", label: "Automate", icon: "bolt" },
   { href: "/settings", label: "Settings", icon: "settings" },
-  { href: "/account", label: "Account", icon: "account" },
 ];
 
 const TITLES: Record<string, string> = {
@@ -27,7 +26,6 @@ const TITLES: Record<string, string> = {
   "/runs": "Test runs",
   "/automation": "Automate test",
   "/settings": "Settings",
-  "/account": "Account",
 };
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {

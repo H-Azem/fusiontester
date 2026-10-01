@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { AiSettings } from "@/components/ai-settings";
+import { AccountSection } from "@/components/account-section";
 import { SettingsGate, SettingsPasswordCard } from "@/components/settings-gate";
 import { TelegramSettings } from "@/components/telegram-settings";
 import { Icon } from "@/components/icons";
@@ -303,6 +304,7 @@ export default function SettingsPage() {
         <AiSettings />
         <TelegramSettings />
         <SettingsPasswordCard />
+        <AccountSection />
       </div>
     </SettingsGate>
   );
