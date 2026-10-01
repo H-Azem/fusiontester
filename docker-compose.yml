@@ -30,7 +30,7 @@ services:
       # Must match the public URL exactly: login origin checks compare against it.
       WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN in .env}
       TRUST_PROXY: "true"
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-fusion}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       CHROME_PATH: /usr/bin/chromium
       # Private `git:` pub packages are authenticated with the token stored in
