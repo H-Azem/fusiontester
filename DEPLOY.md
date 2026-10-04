@@ -176,3 +176,23 @@ Run that from cron if the server sees regular use.
 - `init: true` reaps the git/Flutter/Chromium children a run spawns, so a
   restart cannot leave a build running in the background.
 - `PGLITE_DIR` points at the mounted volume, so the database survives rebuilds.
+
+## After a host reboot: the Android device
+
+`redroid` needs `binderfs`, which a reboot takes away, and without it the container
+exits the moment it starts — which the run reports as "the device did not come back
+after the build" rather than as anything about binderfs.
+
+Both ends are handled now:
+
+- `fusion-binderfs.service` mounts `/dev/binderfs` before Docker starts (enabled).
+- The device watcher mounts it again before every resume, and says so in
+  `/srv/fusion-control/device.log` when the container exits at once anyway.
+
+To check by hand:
+
+```bash
+systemctl is-active fusion-binderfs fusion-device-watch
+docker ps --filter name=redroid           # should be Up, or stopped deliberately between runs
+docker exec tester-api-1 /root/android-sdk/platform-tools/adb devices   # 172.17.0.1:5555 device
+```
