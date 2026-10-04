@@ -606,7 +606,60 @@ class ExecuteRunAction
             }
         }
 
+        $keyboard = $this->disableSoftKeyboard();
+
+        if ($keyboard !== null) {
+            $applied[] = $keyboard;
+        }
+
         return 'Device prepared: '.implode(', ', $applied).'.';
+    }
+
+    /**
+     * Turns off every input method the device offers, so no soft keyboard can appear
+     * during a test.
+     *
+     * A keyboard covers the bottom of the screen and pushes the app's layout around,
+     * which hides the very element a flow is about to assert on — a row added by the
+     * step just before it, in the case that prompted this. Maestro does not need a
+     * keyboard at all: it injects text itself, so typing keeps working with none.
+     *
+     * @return string|null what happened, for the stage log
+     */
+    private function disableSoftKeyboard(): ?string
+    {
+        $listed = $this->process(
+            array_merge($this->adb(), ['shell', 'ime', 'list', '-s']),
+            null,
+            self::ADB_TIMEOUT_SECONDS
+        );
+
+        if (! $listed['ok']) {
+            return null;
+        }
+
+        $disabled = [];
+
+        foreach (preg_split('/\R/', $listed['output']) ?: [] as $line) {
+            $id = trim($line);
+
+            // `ime list -s` prints one component per line, as package/class.
+            if ($id === '' || ! str_contains($id, '/')) {
+                continue;
+            }
+
+            $result = $this->process(
+                array_merge($this->adb(), ['shell', 'ime', 'disable', $id]),
+                null,
+                self::ADB_TIMEOUT_SECONDS
+            );
+
+            if ($result['ok']) {
+                $disabled[] = $id;
+            }
+        }
+
+        return $disabled === [] ? null : 'input methods off ('.implode(', ', $disabled).')';
     }
 
     /**
