@@ -606,7 +606,77 @@ class ExecuteRunAction
             }
         }
 
+        $keyboard = $this->useQuietKeyboard();
+
+        if ($keyboard !== null) {
+            $applied[] = $keyboard;
+        }
+
         return 'Device prepared: '.implode(', ', $applied).'.';
+    }
+
+    /** The input method that draws nothing, and the package it ships in. */
+    private const QUIET_KEYBOARD_PACKAGE = 'com.nilac.nullkeyboard';
+
+    private const QUIET_KEYBOARD_IME = 'com.nilac.nullkeyboard/.NullKeyboardService';
+
+    /**
+     * The keyboard a test device gets: a real input method that draws nothing.
+     *
+     * A soft keyboard covers the bottom of the screen and pushes the app's layout
+     * around, hiding the element a flow is about to assert on — the row a step just
+     * added, in the case that prompted this. Maestro injects text itself and never
+     * needs a keyboard, so the device keeps one that shows nothing.
+     *
+     * It keeps an input method at all, rather than having none: Android restores its
+     * default IME when nothing is enabled, which is why disabling the keyboard does
+     * not hold. And it is installed only when missing, because the device keeps it
+     * across runs — this is here so a device rebuilt from nothing comes back the same.
+     *
+     * @return string|null what happened, for the stage log
+     */
+    private function useQuietKeyboard(): ?string
+    {
+        if (! $this->packageInstalled(self::QUIET_KEYBOARD_PACKAGE)) {
+            $files = resource_path('ime/null-keyboard');
+
+            $apks = array_values(array_filter([
+                $files.'/base.apk',
+                $files.'/split_config.xhdpi.apk',
+                $files.'/split_config.en.apk',
+            ], 'is_file'));
+
+            if ($apks === []) {
+                return null;
+            }
+
+            $install = $this->process(
+                array_merge($this->adb(), ['install-multiple', '-r'], $apks),
+                null,
+                self::INSTALL_TIMEOUT_SECONDS
+            );
+
+            if (! $install['ok']) {
+                return null;
+            }
+        }
+
+        // Selecting it is what stops Android from putting its own keyboard back.
+        $this->process(array_merge($this->adb(), ['shell', 'ime', 'enable', self::QUIET_KEYBOARD_IME]), null, self::ADB_TIMEOUT_SECONDS);
+        $this->process(array_merge($this->adb(), ['shell', 'ime', 'set', self::QUIET_KEYBOARD_IME]), null, self::ADB_TIMEOUT_SECONDS);
+
+        return self::QUIET_KEYBOARD_PACKAGE;
+    }
+
+    private function packageInstalled(string $package): bool
+    {
+        $result = $this->process(
+            array_merge($this->adb(), ['shell', 'pm', 'list', 'packages', $package]),
+            null,
+            self::ADB_TIMEOUT_SECONDS
+        );
+
+        return $result['ok'] && str_contains($result['output'], 'package:'.$package);
     }
 
     /**
