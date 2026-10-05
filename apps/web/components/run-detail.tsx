@@ -255,7 +255,11 @@ export function RunDetail({ id }: { id: string }) {
         />
       )}
 
-      {run.hasMaestroScreenshot && (
+      {/* When the run was watched live, the last frame the recorder captured is the
+          failing screen itself, so Maestro's own capture of that moment would only
+          repeat it. Without live frames — the recorder failed, or the run stopped
+          before the flows — the screenshot is the only view of it there is. */}
+      {run.hasMaestroScreenshot && !(run.live && run.hasLiveFrame) && (
         <ScreenshotPanel
           runId={run.id}
           kind="maestro-screenshot"
