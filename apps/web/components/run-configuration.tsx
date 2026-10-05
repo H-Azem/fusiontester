@@ -54,6 +54,70 @@ export function RunConfiguration({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [selectedTests, setSelectedTests] = useState<Set<string>>(() => new Set<string>());
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set<string>());
+
+  // Tests that live under a folder are grouped by it, because a branch can carry
+  // enough of them to bury the picker. Anything without a folder stays at the top.
+  const { rootTests, testGroups } = useMemo(() => {
+    const root: MaestroTest[] = [];
+    const groups = new Map<string, { name: string; label: string; tests: MaestroTest[]; selected: number }>();
+
+    for (const test of tests) {
+      const slash = test.name.indexOf("/");
+
+      if (slash === -1) {
+        root.push(test);
+        continue;
+      }
+
+      const name = test.name.slice(0, slash);
+      const label = test.displayName.split(" · ")[0] || name;
+      const group = groups.get(name) ?? { name, label, tests: [], selected: 0 };
+
+      group.tests.push(test);
+
+      if (selectedTests.has(test.name)) {
+        group.selected += 1;
+      }
+
+      groups.set(name, group);
+    }
+
+    return { rootTests: root, testGroups: [...groups.values()] };
+  }, [tests, selectedTests]);
+
+  // Choosing a test opens the folder it lives in, so a selection is never hidden.
+  useEffect(() => {
+    setOpenGroups((current) => {
+      const next = new Set(current);
+      let changed = false;
+
+      for (const test of tests) {
+        const slash = test.name.indexOf("/");
+
+        if (slash !== -1 && selectedTests.has(test.name) && !next.has(test.name.slice(0, slash))) {
+          next.add(test.name.slice(0, slash));
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [selectedTests, tests]);
+
+  function setGroupOpen(name: string, open: boolean) {
+    setOpenGroups((current) => {
+      const next = new Set(current);
+
+      if (open) {
+        next.add(name);
+      } else {
+        next.delete(name);
+      }
+
+      return next;
+    });
+  }
   const [runKinds, setRunKinds] = useState<Set<RunKind>>(() => new Set<RunKind>(["maestro"]));
   const [includeProduction, setIncludeProduction] = useState(false);
   const [orientation, setOrientation] = useState<Orientation>("horizontal");
@@ -235,10 +299,14 @@ export function RunConfiguration({
             <div className="sheet-body">
               <div className="stack">
                 <h3 className="md-title-sm">1 · Which tests</h3>
-                <ul className="tests list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
-                  {tests.map((test) => {
+
+                {/* One renderer for a test, used at the top level and inside a folder,
+                    so the two can never drift apart. */}
+                {(() => {
+                  const renderChoice = (test: MaestroTest) => {
                     const isSelected = selectedTests.has(test.name);
                     const isDisabled = exclusiveSelected && !test.exclusive;
+
                     return (
                       <li key={test.name}>
                         <label className={isDisabled ? "choice disabled" : "choice"}>
@@ -256,8 +324,52 @@ export function RunConfiguration({
                         </label>
                       </li>
                     );
-                  })}
-                </ul>
+                  };
+
+                  return (
+                    <>
+                      {rootTests.length > 0 && (
+                        <ul
+                          className="tests list"
+                          style={{ listStyle: "none", margin: 0, padding: 0 }}
+                        >
+                          {rootTests.map(renderChoice)}
+                        </ul>
+                      )}
+
+                      {testGroups.map((group) => (
+                        <details
+                          key={group.name}
+                          open={openGroups.has(group.name)}
+                          onToggle={(event) =>
+                            setGroupOpen(
+                              group.name,
+                              (event.currentTarget as HTMLDetailsElement).open,
+                            )
+                          }
+                        >
+                          <summary className="md-title-sm">
+                            {group.label}
+                            <span className="muted">
+                              {" · "}
+                              {group.tests.length} test{group.tests.length === 1 ? "" : "s"}
+                            </span>
+                            {group.selected > 0 && (
+                              <span className="chip selected">{group.selected} selected</span>
+                            )}
+                          </summary>
+
+                          <ul
+                            className="tests list"
+                            style={{ listStyle: "none", margin: "6px 0 0", padding: "0 0 0 16px" }}
+                          >
+                            {group.tests.map(renderChoice)}
+                          </ul>
+                        </details>
+                      ))}
+                    </>
+                  );
+                })()}
                 {exclusiveSelected && (
                   <p className="md-body-sm muted">
                     A whole-suite test covers every flow, so the individual tests are disabled
