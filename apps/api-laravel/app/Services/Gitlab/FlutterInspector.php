@@ -9,21 +9,30 @@ use Symfony\Component\Yaml\Yaml;
  * Answers "is this branch testable" by inspecting the repository itself.
  *
  * A Flutter *application* is distinguished from a package or plugin through
- * pubspec.yaml plus the presence of platform directories, and the runnable
- * tests are the folders directly under .maestro/flows.
+ * pubspec.yaml plus the presence of platform directories.
+ *
+ * The tests are the *leaves* of .maestro/flows, the same way the repository's own
+ * suite runner finds them: a leaf is a folder that holds full_test.yaml and has no
+ * runnable folder inside it. Feature folders may nest, so a test is named by its
+ * path — `orders/add_order` — and selecting a parent is never required.
  */
 class FlutterInspector
 {
     const MAESTRO_FLOWS_PATH = '.maestro/flows';
 
+    const TEST_FLOW_FILE = 'full_test.yaml';
+
     /** Reusable subflows, not tests; Maestro's own convention. */
     const NON_TEST_FLOW_FOLDERS = ['shared'];
 
-    /** Whole-app suites: selecting one makes individual selection meaningless. */
+    /** Whole-app suites, orchestrated rather than run as one flow. */
     const EXCLUSIVE_TEST_FOLDERS = ['full_app'];
 
     /** Presence of any of these marks a runnable application. */
     const PLATFORM_DIRECTORIES = ['android', 'ios', 'web', 'linux', 'macos', 'windows'];
+
+    /** Deep enough for the layouts people actually use, and a bound on API calls. */
+    const MAX_FLOW_DEPTH = 5;
 
     public function __construct(private GitlabClient $client = new GitlabClient) {}
 
@@ -46,24 +55,19 @@ class FlutterInspector
         );
 
         $flowsTree = $this->client->getTree($connection, $projectId, $ref, self::MAESTRO_FLOWS_PATH);
-        $allFolders = $flowsTree === null
-            ? []
-            : array_values(array_filter($flowsTree, fn (array $entry) => ($entry['type'] ?? '') === 'tree'));
-        $testFolders = array_values(array_filter($allFolders, fn (array $entry) => $this->isTestFolder((string) $entry['name'])));
+        $tests = $flowsTree === null ? [] : $this->leaves($connection, $projectId, $ref);
 
         if ($flowsTree === null) {
             $hasMaestroFlows = false;
             $hasMaestroFlowsReason = 'No '.self::MAESTRO_FLOWS_PATH.' folder at the project root.';
-        } elseif ($testFolders === []) {
+        } elseif ($tests === []) {
             $hasMaestroFlows = false;
-            $hasMaestroFlowsReason = $allFolders === []
-                ? self::MAESTRO_FLOWS_PATH.' exists but contains no test folders.'
-                : self::MAESTRO_FLOWS_PATH.' contains only shared subflow folders ('
-                    .implode(', ', array_column($allFolders, 'name')).'), with no tests.';
+            $hasMaestroFlowsReason = self::MAESTRO_FLOWS_PATH.' holds no tests: a test is a folder with '
+                .self::TEST_FLOW_FILE.' and no test folder inside it.';
         } else {
             $hasMaestroFlows = true;
-            $plural = count($testFolders) === 1 ? '' : 's';
-            $hasMaestroFlowsReason = 'Found '.count($testFolders)." test folder{$plural} in ".self::MAESTRO_FLOWS_PATH.'.';
+            $plural = count($tests) === 1 ? '' : 's';
+            $hasMaestroFlowsReason = 'Found '.count($tests)." test{$plural} in ".self::MAESTRO_FLOWS_PATH.'.';
         }
 
         return [
@@ -76,26 +80,22 @@ class FlutterInspector
         ];
     }
 
-    /** Each folder directly under .maestro/flows is one test. */
+    /**
+     * Every leaf test, named by its path under .maestro/flows, so a nested feature
+     * can be picked on its own instead of taking its whole folder.
+     *
+     * @return array<int, array{name: string, displayName: string, path: string, exclusive: bool}>
+     */
     public function listMaestroTests(GitlabConnectionData $connection, int $projectId, string $ref): array
     {
-        $tree = $this->client->getTree($connection, $projectId, $ref, self::MAESTRO_FLOWS_PATH);
-        if ($tree === null) {
-            return [];
-        }
-
         $tests = [];
-        foreach ($tree as $entry) {
-            if (($entry['type'] ?? '') !== 'tree' || ! $this->isTestFolder((string) $entry['name'])) {
-                continue;
-            }
 
-            $name = (string) $entry['name'];
+        foreach ($this->leaves($connection, $projectId, $ref) as $relative) {
             $tests[] = [
-                'name' => $name,
-                'displayName' => self::humanizeTestName($name),
-                'path' => (string) ($entry['path'] ?? $name),
-                'exclusive' => in_array($name, self::EXCLUSIVE_TEST_FOLDERS, true),
+                'name' => $relative,
+                'displayName' => self::displayNameFor($relative),
+                'path' => self::MAESTRO_FLOWS_PATH.'/'.$relative,
+                'exclusive' => in_array(basename($relative), self::EXCLUSIVE_TEST_FOLDERS, true),
             ];
         }
 
@@ -103,10 +103,28 @@ class FlutterInspector
             // Whole-suite tests lead the list; everything else is alphabetical.
             $exclusive = (int) $b['exclusive'] <=> (int) $a['exclusive'];
 
-            return $exclusive !== 0 ? $exclusive : strcmp($a['displayName'], $b['displayName']);
+            return $exclusive !== 0 ? $exclusive : strcmp($a['name'], $b['name']);
         });
 
         return $tests;
+    }
+
+    /**
+     * `orders/add_order` -> `Orders · Add order`: the path says where it lives, which
+     * matters once two features can share a leaf name.
+     */
+    public static function displayNameFor(string $relative): string
+    {
+        $parts = array_values(array_filter(explode('/', $relative), fn (string $part) => $part !== ''));
+
+        if ($parts === []) {
+            return $relative;
+        }
+
+        $leaf = self::humanizeTestName((string) array_pop($parts));
+        $parents = array_map([self::class, 'humanizeTestName'], $parts);
+
+        return $parents === [] ? $leaf : implode(' · ', $parents).' · '.$leaf;
     }
 
     /** `orders_list` -> `Orders list`: only the first character is upper-cased. */
@@ -120,6 +138,87 @@ class FlutterInspector
     public function isTestFolder(string $folderName): bool
     {
         return ! in_array($folderName, self::NON_TEST_FLOW_FOLDERS, true);
+    }
+
+    /**
+     * Relative paths of every leaf under .maestro/flows.
+     *
+     * A folder is a leaf when it holds the entry flow and nothing runnable inside it.
+     * A folder with children is a menu: the children are the tests, and its own entry
+     * flow is not offered — which is how the repository's own runner reads it.
+     *
+     * @return array<int, string>
+     */
+    private function leaves(GitlabConnectionData $connection, int $projectId, string $ref): array
+    {
+        return $this->leavesUnder($connection, $projectId, $ref, '', 0);
+    }
+
+    /** @return array<int, string> */
+    private function leavesUnder(
+        GitlabConnectionData $connection,
+        int $projectId,
+        string $ref,
+        string $relative,
+        int $depth
+    ): array {
+        if ($depth > self::MAX_FLOW_DEPTH) {
+            return [];
+        }
+
+        $path = $relative === '' ? self::MAESTRO_FLOWS_PATH : self::MAESTRO_FLOWS_PATH.'/'.$relative;
+        $entries = $this->client->getTree($connection, $projectId, $ref, $path) ?? [];
+
+        $hasEntryFlow = false;
+        $folders = [];
+
+        foreach ($entries as $entry) {
+            $name = (string) ($entry['name'] ?? '');
+
+            if ($name === '') {
+                continue;
+            }
+
+            if (($entry['type'] ?? '') === 'blob') {
+                $hasEntryFlow = $hasEntryFlow || $name === self::TEST_FLOW_FILE;
+                continue;
+            }
+
+            if (($entry['type'] ?? '') !== 'tree' || $this->isReservedFolder($name)) {
+                continue;
+            }
+
+            $folders[] = $name;
+        }
+
+        sort($folders);
+
+        $leaves = [];
+
+        foreach ($folders as $folder) {
+            $child = $relative === '' ? $folder : $relative.'/'.$folder;
+
+            $leaves = array_merge(
+                $leaves,
+                $this->leavesUnder($connection, $projectId, $ref, $child, $depth + 1)
+            );
+        }
+
+        if ($leaves !== []) {
+            return $leaves;
+        }
+
+        // Nothing runnable below, so this folder is itself the test.
+        return $hasEntryFlow && $relative !== '' ? [$relative] : [];
+    }
+
+    private function isReservedFolder(string $folder): bool
+    {
+        return in_array(
+            $folder,
+            array_merge(self::NON_TEST_FLOW_FOLDERS, self::EXCLUSIVE_TEST_FOLDERS),
+            true
+        );
     }
 
     private function inspectPubspec(
