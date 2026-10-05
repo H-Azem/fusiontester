@@ -54,7 +54,7 @@ export function RunConfiguration({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [selectedTests, setSelectedTests] = useState<Set<string>>(() => new Set<string>());
-  const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set<string>());
+  const [closedGroups, setClosedGroups] = useState<Set<string>>(() => new Set<string>());
 
   // Tests that live under a folder are grouped by it, because a branch can carry
   // enough of them to bury the picker. Anything without a folder stays at the top.
@@ -86,17 +86,20 @@ export function RunConfiguration({
     return { rootTests: root, testGroups: [...groups.values()] };
   }, [tests, selectedTests]);
 
-  // Choosing a test opens the folder it lives in, so a selection is never hidden.
+  // Folders are open by default: a nested test is usually the one being run, so it
+  // should not look tucked away. Closing one is a choice worth remembering, and a
+  // test chosen inside a closed folder opens it again.
   useEffect(() => {
-    setOpenGroups((current) => {
+    setClosedGroups((current) => {
       const next = new Set(current);
       let changed = false;
 
       for (const test of tests) {
         const slash = test.name.indexOf("/");
+        const group = slash === -1 ? null : test.name.slice(0, slash);
 
-        if (slash !== -1 && selectedTests.has(test.name) && !next.has(test.name.slice(0, slash))) {
-          next.add(test.name.slice(0, slash));
+        if (group !== null && selectedTests.has(test.name) && next.has(group)) {
+          next.delete(group);
           changed = true;
         }
       }
@@ -106,13 +109,13 @@ export function RunConfiguration({
   }, [selectedTests, tests]);
 
   function setGroupOpen(name: string, open: boolean) {
-    setOpenGroups((current) => {
+    setClosedGroups((current) => {
       const next = new Set(current);
 
       if (open) {
-        next.add(name);
-      } else {
         next.delete(name);
+      } else {
+        next.add(name);
       }
 
       return next;
@@ -340,7 +343,7 @@ export function RunConfiguration({
                       {testGroups.map((group) => (
                         <details
                           key={group.name}
-                          open={openGroups.has(group.name)}
+                          open={!closedGroups.has(group.name)}
                           onToggle={(event) =>
                             setGroupOpen(
                               group.name,
