@@ -668,6 +668,50 @@ class ExecuteRunAction
         return self::QUIET_KEYBOARD_PACKAGE;
     }
 
+    /**
+     * Drops the advertisement Maestro prints after a run.
+     *
+     * The CLI ends its output with a boxed pitch for its cloud service, which has
+     * nothing to do with the test and is the last thing a person reads in the panel.
+     * It arrives inside a box drawn from box-drawing characters, and no line Maestro
+     * prints about a running flow is made only of those, so the box goes and nothing
+     * else does.
+     */
+    public static function stripMaestroPromo(string $output): string
+    {
+        $kept = [];
+        $inBox = false;
+
+        foreach (preg_split('/\R/', $output) ?: [] as $line) {
+            $trimmed = ltrim($line);
+
+            // Everything between the box's own corners goes, whatever it says.
+            if (str_starts_with($trimmed, '╭')) {
+                $inBox = true;
+                continue;
+            }
+
+            if ($inBox) {
+                $inBox = ! str_starts_with($trimmed, '╰');
+                continue;
+            }
+
+            // Anything the CLI prints outside a box, and a stray border line.
+            if (stripos($line, 'maestro cloud') !== false) {
+                continue;
+            }
+
+            if ($line !== '' && preg_match('/^[\s╭╮╰╯│─]+$/u', $line) === 1) {
+                continue;
+            }
+
+            $kept[] = $line;
+        }
+
+        // A blank or two often remains where the box was.
+        return trim((string) preg_replace("/\n{3,}/", "\n\n", implode("\n", $kept)));
+    }
+
     private function packageInstalled(string $package): bool
     {
         $result = $this->process(
@@ -747,7 +791,7 @@ class ExecuteRunAction
         $this->runs->finishStage(
             $this->run,
             'maestro',
-            'Ran '.count($resolved['flows'])." flow(s): {$counts}.".$smokeNote."\n\n".$result['output']
+            'Ran '.count($resolved['flows'])." flow(s): {$counts}.".$smokeNote."\n\n".self::stripMaestroPromo($result['output'])
         );
     }
 
@@ -1043,7 +1087,7 @@ class ExecuteRunAction
         $this->runs->finishStage(
             $this->run,
             'maestro',
-            'Ran '.count($resolved['flows'])." flow(s): {$counts}.".$smokeNote."\n\n".$result['output']
+            'Ran '.count($resolved['flows'])." flow(s): {$counts}.".$smokeNote."\n\n".self::stripMaestroPromo($result['output'])
         );
     }
 
