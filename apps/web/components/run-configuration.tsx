@@ -122,7 +122,7 @@ export function RunConfiguration({
     });
   }
   const [runKinds, setRunKinds] = useState<Set<RunKind>>(() => new Set<RunKind>(["maestro"]));
-  const [includeProduction, setIncludeProduction] = useState(false);
+  // const [includeProduction, setIncludeProduction] = useState(false);
   const [orientation, setOrientation] = useState<Orientation>("horizontal");
   const [platform, setPlatform] = useState<Platform>("android");
   const [live, setLive] = useState(true);
@@ -231,7 +231,9 @@ export function RunConfiguration({
           branch,
           tests: [...selectedTests],
           runKinds: [...runKinds],
-          environments: includeProduction ? ["development", "production"] : ["development"],
+          // Production is commented out for now, so a run cannot ask for it.
+          // environments: includeProduction ? ["development", "production"] : ["development"],
+          environments: ["development"],
           orientation,
           platform,
           live: platform === "android" && live,
@@ -457,18 +459,20 @@ export function RunConfiguration({
                   </span>
                 </label>
 
-                <label className="switch">
-                  <input
-                    type="checkbox"
-                    checked={includeProduction}
-                    onChange={() => setIncludeProduction((current) => !current)}
-                  />
-                  <span>
-                    <span className="md-title-sm">Also run production environment</span>
-                    <br />
-                    <span className="md-body-sm muted">development always runs</span>
-                  </span>
-                </label>
+{/* Production builds are off for now.
+//                 <label className="switch">
+//                   <input
+//                     type="checkbox"
+//                     checked={includeProduction}
+//                     onChange={() => setIncludeProduction((current) => !current)}
+//                   />
+//                   <span>
+//                     <span className="md-title-sm">Also run production environment</span>
+//                     <br />
+//                     <span className="md-body-sm muted">development always runs</span>
+//                   </span>
+//                 </label>
+*/}
               </div>
 
               <details className="disclosure">
