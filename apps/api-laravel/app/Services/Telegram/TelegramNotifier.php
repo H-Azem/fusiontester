@@ -25,7 +25,7 @@ class TelegramNotifier
     {
         $connection = $this->connections->data();
 
-        if ($connection === null) {
+        if ($connection === null || ! $connection->enabled) {
             return;
         }
 
@@ -35,7 +35,7 @@ class TelegramNotifier
             return;
         }
 
-        $result = $this->client->sendMessage($connection->token, $connection->chatId, $this->message($run, $passed));
+        $result = $this->client->sendMessage($connection->token, $connection->chatId, $this->message($run, $passed), $connection->threadId);
 
         $this->connections->recordVerification($result['ok'], $result['ok'] ? null : $result['detail']);
     }

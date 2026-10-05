@@ -12,6 +12,8 @@ use Illuminate\Database\Eloquent\Model;
     self::BOT_TOKEN_HINT,
     self::CHAT_ID,
     self::NOTIFY_ON_PASS,
+    self::MESSAGE_THREAD_ID,
+    self::ENABLED,
 ])]
 class TelegramConnection extends Model implements BaseModelInterface
 {
@@ -28,6 +30,12 @@ class TelegramConnection extends Model implements BaseModelInterface
 
     const NOTIFY_ON_PASS = 'notify_on_pass';
 
+    /** The forum topic a group report goes to; empty posts to the group itself. */
+    const MESSAGE_THREAD_ID = 'message_thread_id';
+
+    /** Off means no report leaves the machine, whatever the other switches say. */
+    const ENABLED = 'enabled';
+
     const LAST_VERIFIED_AT = 'last_verified_at';
 
     const LAST_VERIFY_OK = 'last_verify_ok';
@@ -40,6 +48,7 @@ class TelegramConnection extends Model implements BaseModelInterface
     {
         return [
             self::NOTIFY_ON_PASS => 'boolean',
+            self::ENABLED => 'boolean',
             self::LAST_VERIFIED_AT => 'datetime',
             self::LAST_VERIFY_OK => 'boolean',
         ];

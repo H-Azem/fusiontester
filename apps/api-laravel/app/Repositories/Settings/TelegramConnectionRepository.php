@@ -26,11 +26,19 @@ class TelegramConnectionRepository
         return new TelegramConnectionData(
             $this->box->decrypt((string) $row->getBotTokenCiphertext()),
             (string) $row->getChatId(),
-            (bool) $row->getNotifyOnPass()
+            (bool) $row->getNotifyOnPass(),
+            $row->getMessageThreadId() === null ? null : (string) $row->getMessageThreadId(),
+            (bool) $row->getEnabled()
         );
     }
 
-    public function save(string $botToken, string $chatId, bool $notifyOnPass): TelegramConnection
+    public function save(
+        string $botToken,
+        string $chatId,
+        bool $notifyOnPass,
+        ?string $threadId = null,
+        bool $enabled = true
+    ): TelegramConnection
     {
         $current = $this->row();
 
@@ -43,6 +51,8 @@ class TelegramConnectionRepository
                 : (string) $current?->getBotTokenHint(),
             TelegramConnection::CHAT_ID => $chatId,
             TelegramConnection::NOTIFY_ON_PASS => $notifyOnPass,
+            TelegramConnection::MESSAGE_THREAD_ID => $threadId === '' ? null : $threadId,
+            TelegramConnection::ENABLED => $enabled,
         ];
 
         TelegramConnection::query()->delete();

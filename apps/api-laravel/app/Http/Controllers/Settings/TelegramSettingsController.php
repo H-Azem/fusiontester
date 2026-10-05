@@ -25,7 +25,7 @@ class TelegramSettingsController extends Controller
         $row = $this->connections->row();
 
         if ($row === null) {
-            return $this->legacyResponse(['configured' => false, 'notifyOnPass' => true]);
+            return $this->legacyResponse(['configured' => false, 'notifyOnPass' => true, 'enabled' => true]);
         }
 
         return $this->legacyResponse([
@@ -33,6 +33,8 @@ class TelegramSettingsController extends Controller
             'chatId' => $row->getChatId(),
             'botTokenHint' => $row->getBotTokenHint(),
             'notifyOnPass' => (bool) $row->getNotifyOnPass(),
+            'messageThreadId' => $row->getMessageThreadId(),
+            'enabled' => (bool) $row->getEnabled(),
             'lastVerifiedAt' => $row->getLastVerifiedAt()?->toIso8601String(),
             'lastVerifyOk' => $row->getLastVerifyOk(),
             'lastVerifyError' => $row->getLastVerifyError(),
@@ -45,12 +47,20 @@ class TelegramSettingsController extends Controller
             'botToken' => ['sometimes', 'nullable', 'string', 'max:200'],
             'chatId' => ['required', 'string', 'max:200'],
             'notifyOnPass' => ['sometimes', 'boolean'],
+            'messageThreadId' => ['sometimes', 'nullable', 'string', 'max:40'],
+            'enabled' => ['sometimes', 'boolean'],
         ]);
+
+        $current = $this->connections->row();
 
         $this->connections->save(
             (string) ($validated['botToken'] ?? ''),
             (string) $validated['chatId'],
-            (bool) ($validated['notifyOnPass'] ?? true)
+            (bool) ($validated['notifyOnPass'] ?? $current?->getNotifyOnPass() ?? true),
+            array_key_exists('messageThreadId', $validated)
+                ? ($validated['messageThreadId'] === null ? null : (string) $validated['messageThreadId'])
+                : ($current?->getMessageThreadId() === null ? null : (string) $current->getMessageThreadId()),
+            (bool) ($validated['enabled'] ?? $current?->getEnabled() ?? true)
         );
 
         return $this->show();
@@ -61,6 +71,7 @@ class TelegramSettingsController extends Controller
         $validated = $request->validate([
             'botToken' => ['sometimes', 'nullable', 'string', 'max:200'],
             'chatId' => ['sometimes', 'nullable', 'string', 'max:200'],
+            'messageThreadId' => ['sometimes', 'nullable', 'string', 'max:40'],
         ]);
 
         $stored = $this->connections->data();
@@ -90,10 +101,15 @@ class TelegramSettingsController extends Controller
             ]);
         }
 
+        $threadId = (string) ($validated['messageThreadId'] ?? '') !== ''
+            ? (string) $validated['messageThreadId']
+            : $stored?->threadId;
+
         $delivery = $this->client->sendMessage(
             $token,
             $chatId,
-            "✅ <b>Fusion Tester is connected</b>\nRun reports will arrive in this channel."
+            "✅ <b>Fusion Tester is connected</b>\nRun reports will arrive in this channel.",
+            $threadId
         );
 
         $this->connections->recordVerification($delivery['ok'], $delivery['ok'] ? null : $delivery['detail']);

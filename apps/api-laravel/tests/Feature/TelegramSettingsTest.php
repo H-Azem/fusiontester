@@ -147,4 +147,42 @@ class TelegramSettingsTest extends TestCase
         $notifier->report($run);
         Http::assertNothingSent();
     }
+
+    #[Test]
+    public function reports_can_be_switched_off_entirely(): void
+    {
+        $token = $this->loginToken();
+        $this->unlockAndSave($token);
+
+        $this->asSession($token)->putJson('/settings/telegram', [
+            'chatId' => '@fusion_reports',
+            'enabled' => false,
+        ])->assertSuccessful()->assertJsonPath('enabled', false);
+
+        Http::fake();
+
+        (new TelegramNotifier)->report(new Run([Run::STATUS => Run::STATUS_PASSED]));
+
+        // Off means off, whatever the other switch says.
+        Http::assertNothingSent();
+    }
+
+    #[Test]
+    public function a_report_can_be_sent_into_one_topic(): void
+    {
+        $token = $this->loginToken();
+        $this->unlockAndSave($token);
+
+        $this->asSession($token)->putJson('/settings/telegram', [
+            'chatId' => '@fusion_reports',
+            'messageThreadId' => '42',
+        ])->assertSuccessful()->assertJsonPath('messageThreadId', '42');
+
+        Http::fake(['api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]])]);
+
+        (new TelegramNotifier)->report(new Run([Run::STATUS => Run::STATUS_PASSED]));
+
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage')
+            && (string) $request['message_thread_id'] === '42');
+    }
 }

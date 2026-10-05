@@ -9,5 +9,7 @@ class TelegramConnectionData
         public readonly string $token,
         public readonly string $chatId,
         public readonly bool $notifyOnPass = true,
+        public readonly ?string $threadId = null,
+        public readonly bool $enabled = true,
     ) {}
 }

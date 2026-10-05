@@ -32,14 +32,21 @@ class TelegramClient
     }
 
     /** @return array{ok: bool, detail: string} */
-    public function sendMessage(string $token, string $chatId, string $text): array
+    public function sendMessage(string $token, string $chatId, string $text, ?string $threadId = null): array
     {
-        $response = $this->call($token, 'sendMessage', [
+        $payload = [
             'chat_id' => $chatId,
             'text' => $text,
             'parse_mode' => 'HTML',
             'disable_web_page_preview' => true,
-        ]);
+        ];
+
+        // A forum group posts into a topic; without one the message lands in General.
+        if ($threadId !== null && $threadId !== '') {
+            $payload['message_thread_id'] = $threadId;
+        }
+
+        $response = $this->call($token, 'sendMessage', $payload);
 
         return [
             'ok' => $response['ok'],

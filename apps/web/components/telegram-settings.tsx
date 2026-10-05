@@ -10,6 +10,8 @@ type TelegramConfig = {
   chatId?: string;
   botTokenHint?: string;
   notifyOnPass?: boolean;
+  messageThreadId?: string | null;
+  enabled?: boolean;
   lastVerifiedAt?: string | null;
   lastVerifyOk?: boolean | null;
   lastVerifyError?: string | null;
@@ -26,6 +28,8 @@ export function TelegramSettings() {
   const [botToken, setBotToken] = useState("");
   const [chatId, setChatId] = useState("");
   const [notifyOnPass, setNotifyOnPass] = useState(true);
+  const [topicId, setTopicId] = useState("");
+  const [enabled, setEnabled] = useState(true);
   const [result, setResult] = useState<TestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -43,6 +47,8 @@ export function TelegramSettings() {
     setConfig(data);
     setChatId(data.chatId ?? "");
     setNotifyOnPass(data.notifyOnPass ?? true);
+    setTopicId(data.messageThreadId ?? "");
+    setEnabled(data.enabled ?? true);
   }, []);
 
   useEffect(() => {
@@ -59,7 +65,7 @@ export function TelegramSettings() {
       const response = await fetch("/api/settings/telegram", {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ botToken: botToken || undefined, chatId, notifyOnPass }),
+        body: JSON.stringify({ botToken: botToken || undefined, chatId, notifyOnPass, messageThreadId: topicId, enabled }),
       });
 
       const data = (await response.json()) as { message?: string };
@@ -128,6 +134,15 @@ export function TelegramSettings() {
       )}
 
       <form className="stack" onSubmit={save}>
+        <label className="switch">
+          <input type="checkbox" checked={enabled} onChange={() => setEnabled((current) => !current)} />
+          <span>
+            <span className="md-title-sm">Send reports</span>
+            <br />
+            <span className="md-body-sm muted">Off sends nothing at all</span>
+          </span>
+        </label>
+
         <div className="split">
           <label className="field">
             <span className="field-label">Bot token</span>
@@ -157,9 +172,24 @@ export function TelegramSettings() {
               </span>
             </label>
 
+            <label className={enabled ? "field" : "field muted"}>
+              <span className="field-label">Topic id</span>
+              <input
+                placeholder="leave blank for the group itself"
+                value={topicId}
+                onChange={(event) => setTopicId(event.target.value)}
+                disabled={!enabled}
+              />
+              <span className="hint">
+                For a forum group, the number at the end of the topic's link — reports go there
+                instead of the group.
+              </span>
+            </label>
+
             <label className="switch">
               <input
                 type="checkbox"
+                disabled={!enabled}
                 checked={notifyOnPass}
                 onChange={() => setNotifyOnPass((current) => !current)}
               />
@@ -198,7 +228,7 @@ export function TelegramSettings() {
             {busy === "save" ? <span className="spinner" /> : <Icon name="check" size={18} />}
             {busy === "save" ? "Saving…" : "Save Telegram settings"}
           </button>
-          <button type="button" className="md-button tonal" onClick={() => void test()} disabled={busy !== null}>
+          <button type="button" className="md-button tonal" onClick={() => void test()} disabled={busy !== null || !enabled}>
             {busy === "test" ? <span className="spinner" /> : <Icon name="live" size={18} />}
             {busy === "test" ? "Sending…" : "Send a test message"}
           </button>
