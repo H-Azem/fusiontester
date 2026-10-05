@@ -791,7 +791,7 @@ class ExecuteRunAction
         $this->runs->finishStage(
             $this->run,
             'maestro',
-            'Ran '.count($resolved['flows'])." flow(s): {$counts}.".$smokeNote."\n\n".self::stripMaestroPromo($result['output'])
+            'Ran '.count($resolved['flows'])." flow(s): {$counts}.".$smokeNote."\n\nFlows: ".(implode(', ', $resolved['flows']))."\n\n".self::stripMaestroPromo($result['output'])
         );
     }
 
@@ -1087,7 +1087,7 @@ class ExecuteRunAction
         $this->runs->finishStage(
             $this->run,
             'maestro',
-            'Ran '.count($resolved['flows'])." flow(s): {$counts}.".$smokeNote."\n\n".self::stripMaestroPromo($result['output'])
+            'Ran '.count($resolved['flows'])." flow(s): {$counts}.".$smokeNote."\n\nFlows: ".(implode(', ', $resolved['flows']))."\n\n".self::stripMaestroPromo($result['output'])
         );
     }
 
