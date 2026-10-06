@@ -2,8 +2,10 @@
 
 namespace App\Services\Telegram;
 
+use App\Http\Resources\RunArtifacts;
 use App\Models\Run;
 use App\Models\RunStep;
+use App\Repositories\Settings\AiConnectionRepository;
 use App\Repositories\Settings\TelegramConnectionRepository;
 
 /**
@@ -19,6 +21,7 @@ class TelegramNotifier
     public function __construct(
         private TelegramConnectionRepository $connections = new TelegramConnectionRepository,
         private TelegramClient $client = new TelegramClient,
+        private AiConnectionRepository $ai = new AiConnectionRepository,
     ) {}
 
     public function report(Run $run): void
@@ -75,9 +78,74 @@ class TelegramNotifier
             }
         }
 
+        $ai = $this->aiReport($run);
+        if ($ai !== null) {
+            $lines[] = $ai;
+        }
+
         $lines[] = $this->link($run);
 
         return $this->clip(implode("\n", $lines), self::MAX_LENGTH);
+    }
+
+    /**
+     * The AI lane's own verdict, when the lane produced one and the switch to share
+     * it is on. Absent for runs that never reached the lane, so nothing changes for
+     * the ordinary Maestro reports.
+     */
+    private function aiReport(Run $run): ?string
+    {
+        $connection = $this->ai->row();
+
+        if ($connection === null || ! $connection->getShareReportToTelegram()) {
+            return null;
+        }
+
+        $path = RunArtifacts::path((string) $run->getId(), RunArtifacts::AI_REPORT);
+
+        if (! is_file($path)) {
+            return null;
+        }
+
+        $report = json_decode((string) file_get_contents($path), true);
+
+        if (! is_array($report)) {
+            return null;
+        }
+
+        $goals = is_array($report['goals'] ?? null) ? $report['goals'] : [];
+        $summary = trim((string) ($report['summary'] ?? ''));
+
+        if ($goals === [] && $summary === '') {
+            return null;
+        }
+
+        $lines = ['', '<b>AI report</b>'];
+
+        if ($summary !== '') {
+            $lines[] = htmlspecialchars($summary, ENT_QUOTES);
+        }
+
+        foreach ($goals as $goal) {
+            if (! is_array($goal)) {
+                continue;
+            }
+
+            $mark = strtolower((string) ($goal['status'] ?? '')) === 'pass' ? '✅' : '❌';
+            $lines[] = $mark.' '.htmlspecialchars((string) ($goal['text'] ?? ''), ENT_QUOTES);
+        }
+
+        $usage = $report['usage'] ?? null;
+
+        if (is_array($usage)) {
+            $tokens = (int) ($usage['inputTokens'] ?? 0) + (int) ($usage['outputTokens'] ?? 0);
+
+            if ($tokens > 0) {
+                $lines[] = 'Tokens: '.number_format($tokens);
+            }
+        }
+
+        return implode("\n", $lines);
     }
 
     private function firstFailedStep(Run $run): ?RunStep

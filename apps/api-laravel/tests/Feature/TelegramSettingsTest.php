@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Resources\RunArtifacts;
 use App\Models\Run;
 use App\Models\TelegramConnection;
 use App\Services\Telegram\TelegramClient;
@@ -118,6 +119,65 @@ class TelegramSettingsTest extends TestCase
         $this->assertStringContainsString('reports', $message);
         $this->assertStringContainsString('main_screen', $message);
         $this->assertStringContainsString('/runs/', $message);
+    }
+
+    #[Test]
+    public function the_ai_report_is_shared_only_when_its_switch_is_on(): void
+    {
+        $this->loginToken();
+
+        (new \App\Repositories\Settings\TelegramConnectionRepository)->save('123456:AAH', '@channel', true);
+
+        $ai = new \App\Repositories\Settings\AiConnectionRepository;
+        $settings = [
+            'openaiBaseUrl' => 'https://example.com/v1',
+            'openaiModel' => 'model',
+            'openaiToken' => 'sk-test',
+            'jevBaseUrl' => 'https://api.typesafe.ai',
+            'jevToken' => 'ts-test',
+            'maxSteps' => 10,
+            'aiLaneEnabled' => true,
+            'shareReportToTelegram' => false,
+        ];
+
+        $ai->save($settings);
+
+        $run = new Run([Run::STATUS => Run::STATUS_FAILED]);
+        $run->setAttribute('id', '01900000-0000-7000-8000-00000000a1b2');
+
+        $path = RunArtifacts::path('01900000-0000-7000-8000-00000000a1b2', RunArtifacts::AI_REPORT);
+        @mkdir(dirname($path), 0775, true);
+        file_put_contents($path, json_encode([
+            'summary' => 'One goal failed.',
+            'goals' => [
+                ['text' => 'open customers', 'status' => 'pass'],
+                ['text' => 'add customer', 'status' => 'fail'],
+            ],
+            'usage' => ['inputTokens' => 1200, 'outputTokens' => 300],
+        ]));
+
+        // Off: the report stays out of the message.
+        Http::fake();
+        (new TelegramNotifier)->report($run);
+        Http::assertSent(fn ($request) => ! str_contains((string) $request['text'], 'AI report'));
+
+        // On: it is shared, with the goals and the token count.
+        $ai->save(array_merge($settings, ['shareReportToTelegram' => true]));
+
+        Http::fake(['api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]])]);
+        (new TelegramNotifier)->report($run);
+
+        Http::assertSent(function ($request) {
+            $text = (string) $request['text'];
+
+            return str_contains($text, 'AI report')
+                && str_contains($text, 'open customers')
+                && str_contains($text, 'add customer')
+                && str_contains($text, '1,500');
+        });
+
+        @unlink($path);
+        @rmdir(dirname($path));
     }
 
     #[Test]
