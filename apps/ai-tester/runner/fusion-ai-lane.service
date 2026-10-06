@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the AI test lane when the API asks for it
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/fusion-ai-lane.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

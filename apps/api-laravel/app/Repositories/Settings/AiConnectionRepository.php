@@ -58,6 +58,12 @@ class AiConnectionRepository
                 ? $this->box->hint($jevToken)
                 : (string) $current?->getJevTokenHint(),
             AiConnection::MAX_STEPS => $values['maxSteps'] ?? $current?->getMaxSteps() ?? AiClient::DEFAULT_MAX_STEPS,
+            AiConnection::AI_LANE_ENABLED => (bool) ($values['aiLaneEnabled']
+                ?? $current?->getAiLaneEnabled()
+                ?? true),
+            AiConnection::SHARE_REPORT_TO_TELEGRAM => (bool) ($values['shareReportToTelegram']
+                ?? $current?->getShareReportToTelegram()
+                ?? false),
         ];
 
         AiConnection::query()->delete();

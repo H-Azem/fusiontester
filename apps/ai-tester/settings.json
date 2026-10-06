@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "defaultMode": "dont-ask",
+    "additionalDirectories": ["/work"],
+    "allow": [
+      "Shell(adb:*)",
+      "Read(/work/**)",
+      "Write(/work/**)",
+      "Edit(/work/**)"
+    ]
+  }
+}

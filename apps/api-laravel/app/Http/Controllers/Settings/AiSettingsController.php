@@ -25,6 +25,8 @@ class AiSettingsController extends Controller
                 'configured' => false,
                 'openaiBaseUrl' => 'https://api.openai.com/v1',
                 'jevBaseUrl' => 'https://api.typesafe.ai',
+                'aiLaneEnabled' => true,
+                'shareReportToTelegram' => false,
             ]);
         }
 
@@ -36,6 +38,8 @@ class AiSettingsController extends Controller
             'jevBaseUrl' => $row->getJevBaseUrl(),
             'jevTokenHint' => $row->getJevTokenHint(),
             'maxSteps' => $row->getMaxSteps(),
+            'aiLaneEnabled' => (bool) $row->getAiLaneEnabled(),
+            'shareReportToTelegram' => (bool) $row->getShareReportToTelegram(),
             'lastVerifiedAt' => $row->getLastVerifiedAt()?->toIso8601String(),
             'lastVerifyOk' => $row->getLastVerifyOk(),
             'lastVerifyError' => $row->getLastVerifyError(),
@@ -51,6 +55,8 @@ class AiSettingsController extends Controller
             'jevBaseUrl' => ['required', 'string', 'max:500'],
             'jevToken' => ['sometimes', 'nullable', 'string', 'max:500'],
             'maxSteps' => ['sometimes', 'nullable', 'integer', 'min:3', 'max:80'],
+            'aiLaneEnabled' => ['sometimes', 'boolean'],
+            'shareReportToTelegram' => ['sometimes', 'boolean'],
         ]);
 
         $result = run(new SaveAiConnectionAction(
@@ -74,6 +80,8 @@ class AiSettingsController extends Controller
             'jevBaseUrl' => $result['jevBaseUrl'],
             'jevTokenHint' => $result['jevTokenHint'],
             'maxSteps' => $result['maxSteps'],
+            'aiLaneEnabled' => $result['aiLaneEnabled'],
+            'shareReportToTelegram' => $result['shareReportToTelegram'],
         ]);
     }
 

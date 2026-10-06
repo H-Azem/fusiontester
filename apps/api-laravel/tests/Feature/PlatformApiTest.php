@@ -75,7 +75,9 @@ class PlatformApiTest extends TestCase
             ->assertSuccessful()
             ->assertJsonPath('configured', false)
             ->assertJsonPath('openaiBaseUrl', 'https://api.openai.com/v1')
-            ->assertJsonPath('jevBaseUrl', 'https://api.typesafe.ai');
+            ->assertJsonPath('jevBaseUrl', 'https://api.typesafe.ai')
+            ->assertJsonPath('aiLaneEnabled', true)
+            ->assertJsonPath('shareReportToTelegram', false);
 
         $this->asSession($token)->putJson('/settings/ai', [
             'openaiBaseUrl' => 'https://api.openai.com/v1',
@@ -84,11 +86,21 @@ class PlatformApiTest extends TestCase
             'jevBaseUrl' => 'https://api.typesafe.ai',
             'jevToken' => 'ts-test-5678',
             'maxSteps' => 12,
+            'aiLaneEnabled' => false,
+            'shareReportToTelegram' => true,
         ])->assertSuccessful()
             ->assertJsonPath('configured', true)
             ->assertJsonPath('openaiModel', 'gpt-4o-mini')
             ->assertJsonPath('openaiTokenHint', '••••1234')
-            ->assertJsonPath('maxSteps', 12);
+            ->assertJsonPath('maxSteps', 12)
+            ->assertJsonPath('aiLaneEnabled', false)
+            ->assertJsonPath('shareReportToTelegram', true);
+
+        $this->asSession($token)
+            ->getJson('/settings/ai')
+            ->assertSuccessful()
+            ->assertJsonPath('aiLaneEnabled', false)
+            ->assertJsonPath('shareReportToTelegram', true);
     }
 
     #[Test]

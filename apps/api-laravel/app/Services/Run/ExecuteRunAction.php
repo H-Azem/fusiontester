@@ -129,12 +129,16 @@ class ExecuteRunAction
                 return;
             }
 
-            if (in_array(Run::KIND_AI, $kinds, true) && ! $android) {
-                $this->ai($workspace, $repoDir, $url);
+            $aiLaneEnabled = (bool) ($this->aiConnections->row()?->getAiLaneEnabled() ?? true);
+
+            if (! in_array(Run::KIND_AI, $kinds, true)) {
+                $this->runs->skipStage($this->run, 'ai', 'Skipped — the AI check was not selected.');
+            } elseif ($android) {
+                $this->runs->skipStage($this->run, 'ai', 'Skipped — the AI lane reads a web app over CDP, so it runs on the web lane only.');
+            } elseif (! $aiLaneEnabled) {
+                $this->runs->skipStage($this->run, 'ai', 'Skipped — the AI lane is turned off in Settings.');
             } else {
-                $this->runs->skipStage($this->run, 'ai', $android
-                    ? 'Skipped — the AI lane reads a web app over CDP, so it runs on the web lane only.'
-                    : 'Skipped — the AI check was not selected.');
+                $this->ai($workspace, $repoDir, $url);
             }
 
             if ($this->failed()) {

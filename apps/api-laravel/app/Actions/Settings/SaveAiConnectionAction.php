@@ -61,6 +61,12 @@ class SaveAiConnectionAction
             'jevBaseUrl' => $jevBaseUrl,
             'jevToken' => $jevToken,
             'maxSteps' => isset($this->input['maxSteps']) ? (int) $this->input['maxSteps'] : null,
+            'aiLaneEnabled' => array_key_exists('aiLaneEnabled', $this->input)
+                ? (bool) $this->input['aiLaneEnabled']
+                : null,
+            'shareReportToTelegram' => array_key_exists('shareReportToTelegram', $this->input)
+                ? (bool) $this->input['shareReportToTelegram']
+                : null,
         ]);
 
         run(new WriteAuditAction('ai.connection_saved', $this->actorUserId, $this->ip, null, [
@@ -69,6 +75,8 @@ class SaveAiConnectionAction
             'openaiTokenChanged' => $openaiToken !== '',
             'jevTokenChanged' => $jevToken !== '',
             'maxSteps' => $row->getMaxSteps(),
+            'aiLaneEnabled' => (bool) $row->getAiLaneEnabled(),
+            'shareReportToTelegram' => (bool) $row->getShareReportToTelegram(),
         ]));
 
         return [
@@ -80,6 +88,8 @@ class SaveAiConnectionAction
             'jevBaseUrl' => $row->getJevBaseUrl(),
             'jevTokenHint' => $row->getJevTokenHint(),
             'maxSteps' => $row->getMaxSteps(),
+            'aiLaneEnabled' => (bool) $row->getAiLaneEnabled(),
+            'shareReportToTelegram' => (bool) $row->getShareReportToTelegram(),
         ];
     }
 }

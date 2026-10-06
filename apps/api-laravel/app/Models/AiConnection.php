@@ -16,6 +16,8 @@ use Illuminate\Database\Eloquent\Model;
     self::JEV_TOKEN_CIPHERTEXT,
     self::JEV_TOKEN_HINT,
     self::MAX_STEPS,
+    self::AI_LANE_ENABLED,
+    self::SHARE_REPORT_TO_TELEGRAM,
 ])]
 class AiConnection extends Model implements BaseModelInterface
 {
@@ -39,6 +41,12 @@ class AiConnection extends Model implements BaseModelInterface
 
     const MAX_STEPS = 'max_steps';
 
+    /** Off keeps the AI stage out of every run, whatever the run sheet asks for. */
+    const AI_LANE_ENABLED = 'ai_lane_enabled';
+
+    /** Whether the lane's own report is sent to the configured Telegram channel. */
+    const SHARE_REPORT_TO_TELEGRAM = 'share_report_to_telegram';
+
     const LAST_VERIFIED_AT = 'last_verified_at';
 
     const LAST_VERIFY_OK = 'last_verify_ok';
@@ -53,6 +61,8 @@ class AiConnection extends Model implements BaseModelInterface
     {
         return [
             self::MAX_STEPS => 'integer',
+            self::AI_LANE_ENABLED => 'boolean',
+            self::SHARE_REPORT_TO_TELEGRAM => 'boolean',
             self::LAST_VERIFIED_AT => 'datetime',
             self::LAST_VERIFY_OK => 'boolean',
         ];

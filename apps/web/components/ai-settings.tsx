@@ -13,6 +13,8 @@ type AiConfig = {
   jevBaseUrl?: string;
   jevTokenHint?: string;
   maxSteps?: number;
+  aiLaneEnabled?: boolean;
+  shareReportToTelegram?: boolean;
   lastVerifiedAt?: string | null;
   lastVerifyOk?: boolean | null;
   lastVerifyError?: string | null;
@@ -37,6 +39,8 @@ export function AiSettings() {
   const [jevBaseUrl, setJevBaseUrl] = useState("");
   const [jevToken, setJevToken] = useState("");
   const [maxSteps, setMaxSteps] = useState("25");
+  const [aiLaneEnabled, setAiLaneEnabled] = useState(true);
+  const [shareReportToTelegram, setShareReportToTelegram] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -55,6 +59,8 @@ export function AiSettings() {
     setOpenaiModel(data.openaiModel ?? "");
     setJevBaseUrl(data.jevBaseUrl ?? "");
     setMaxSteps(String(data.maxSteps ?? 25));
+    setAiLaneEnabled(data.aiLaneEnabled ?? true);
+    setShareReportToTelegram(data.shareReportToTelegram ?? false);
   }, []);
 
   useEffect(() => {
@@ -78,6 +84,8 @@ export function AiSettings() {
           jevBaseUrl,
           jevToken: jevToken || undefined,
           maxSteps: Number(maxSteps),
+          aiLaneEnabled,
+          shareReportToTelegram,
         }),
       });
 
@@ -225,6 +233,36 @@ export function AiSettings() {
               />
             </label>
           </div>
+        </div>
+
+        <div className="stack">
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={aiLaneEnabled}
+              onChange={() => setAiLaneEnabled((current) => !current)}
+            />
+            <span>
+              <span className="md-title-sm">AI test lane</span>
+              <br />
+              <span className="md-body-sm muted">Off skips the AI stage on every run.</span>
+            </span>
+          </label>
+
+          <label className="switch">
+            <input
+              type="checkbox"
+              checked={shareReportToTelegram}
+              onChange={() => setShareReportToTelegram((current) => !current)}
+            />
+            <span>
+              <span className="md-title-sm">Share the report with Telegram</span>
+              <br />
+              <span className="md-body-sm muted">
+                Sends the lane&apos;s report to the channel in the Telegram card.
+              </span>
+            </span>
+          </label>
         </div>
 
         {error && (
