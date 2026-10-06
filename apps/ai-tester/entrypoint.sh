@@ -42,8 +42,16 @@ fi
 
 MAX_TURNS="${FUSION_MAX_TURNS:-60}"
 
-# --local-only: never contact the Command Code backend. dont-ask: fail closed on
-# anything the settings allowlist does not grant (only adb, plus writing /work).
+# The device and the app are handed over as literals so every adb command can match
+# the allowlist. A `$VARIABLE` inside a command is exactly what the conservative
+# matcher refuses, so the agent is told to read these and spell them out.
+printf 'device=%s\napp=%s\n' "${FUSION_DEVICE:-}" "${FUSION_APP_ID:-}" > /work/environment.txt
+chmod 644 /work/environment.txt
+
+# --local-only: never contact the Command Code backend. dont-ask is the fail-closed
+# mode: the settings allowlist (Shell(adb:*) plus reads/writes under /work) is all
+# the agent may run, and nothing else. AGENTS.md keeps its commands plain for the
+# same reason — no variables, no `;`/`&&`, no redirects or pipes.
 exec cmd -p "$MISSION" \
   -m "fusion/${FUSION_AI_MODEL}" \
   --output-format json \

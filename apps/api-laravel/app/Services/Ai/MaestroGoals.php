@@ -6,30 +6,34 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 /**
- * Turns the repository's Maestro flows into a plain-language goal list.
+ * A short list of landmarks from a test's Maestro flow.
  *
- * The flows already say what a test is supposed to do — which screens it reaches
- * and which elements it touches — so the "what should this test do" question is
- * answered here, for free. What is left for the lane is "how to do it on the
- * screens it actually finds", which is what the model is for.
+ * The AI lane is not a script runner: it should behave like a person using the
+ * app. So the flow is read for *inspiration* only — the few beats a human would
+ * name ("open customers", "add a customer", "it is visible") — and never replayed
+ * step by step. Nested `runFlow`s are not followed: inlining a shared sign-in and
+ * everything it pulls in turned two small tests into thousands of goals.
  *
- * Goals are derived from the commands alone; no model is consulted.
+ * No model is consulted; this is a read of the repository's own text.
  */
 class MaestroGoals
 {
-    /** A runFlow cycle between shared flows must not recurse forever. */
-    const MAX_DEPTH = 8;
+    /** Enough to describe the journey; a longer list is a script again. */
+    const MAX_GOALS = 8;
 
-    /** An id names the widget as well as the thing; the goal should name the thing. */
+    /** An id names the widget as well as the thing; the landmark names the thing. */
     const ID_SUFFIXES = ['_tab', '_button', '_btn', '_icon', '_link'];
 
-    /** Suffixes that mean "moving to a place", phrased as open rather than tap. */
+    /** Moving somewhere is "open"; these id suffixes mark navigation. */
     const NAV_SUFFIXES = ['_tab', '_nav', '_menu'];
+
+    /** A landmark that creates something is worth naming as an action. */
+    const CREATE_WORDS = ['add', 'create', 'new', 'save', 'submit', 'insert', 'register'];
 
     const MAX_LABEL_LENGTH = 60;
 
     /**
-     * @param  array<int, string>  $files  absolute paths to flow files, in run order
+     * @param  array<int, string>  $files  absolute paths to a test's flow files
      * @return array<int, string>
      */
     public function fromFlowFiles(array $files): array
@@ -41,10 +45,17 @@ class MaestroGoals
                 continue;
             }
 
-            $goals = array_merge(
-                $goals,
-                $this->fromYaml((string) file_get_contents($file), dirname($file))
-            );
+            foreach ($this->landmarks($this->steps((string) file_get_contents($file))) as $goal) {
+                if ($goal === '' || in_array($goal, $goals, true)) {
+                    continue;
+                }
+
+                $goals[] = $goal;
+
+                if (count($goals) >= self::MAX_GOALS) {
+                    return $goals;
+                }
+            }
         }
 
         return $goals;
@@ -55,35 +66,8 @@ class MaestroGoals
      * Symfony's parser refuses more than one document — so the list is found by
      * parsing each document and keeping the one that is a list.
      *
-     * @param  array<string, true>  $visited  files already inlined, to break cycles
-     * @return array<int, string>
+     * @return array<int, mixed>
      */
-    public function fromYaml(string $yaml, string $baseDir = '', int $depth = 0, array $visited = []): array
-    {
-        if ($depth > self::MAX_DEPTH) {
-            return [];
-        }
-
-        return $this->goalsFromSteps($this->steps($yaml), $baseDir, $depth, $visited);
-    }
-
-    /** The mission the lane works through: one numbered goal per line. */
-    public function toText(array $goals): string
-    {
-        if ($goals === []) {
-            return 'Explore the app and verify its main journey still works.';
-        }
-
-        $lines = [];
-
-        foreach (array_values($goals) as $index => $goal) {
-            $lines[] = ($index + 1).'. '.$goal;
-        }
-
-        return implode("\n", $lines);
-    }
-
-    /** @return array<int, mixed> */
     private function steps(string $yaml): array
     {
         foreach (preg_split('/^---\s*$/m', $yaml) ?: [] as $document) {
@@ -101,26 +85,37 @@ class MaestroGoals
         return [];
     }
 
-    /**
-     * @param  array<int, mixed>  $steps
-     * @param  array<string, true>  $visited
-     * @return array<int, string>
-     */
-    private function goalsFromSteps(array $steps, string $baseDir, int $depth, array $visited): array
+    /** @return array<int, string> */
+    private function landmarks(array $steps): array
     {
         $goals = [];
 
         foreach ($steps as $step) {
-            foreach ($this->goalsForStep($step, $baseDir, $depth, $visited) as $goal) {
-                if ($goal === '') {
-                    continue;
+            // `- launchApp` has no value at all, so it arrives as a bare string.
+            if (is_string($step)) {
+                if ($step === 'launchApp') {
+                    $goals[] = 'reach the home screen';
                 }
 
-                // A flow that retries or waits repeatedly should not repeat itself.
-                if ($goals !== [] && end($goals) === $goal) {
-                    continue;
-                }
+                continue;
+            }
 
+            if (! is_array($step) || $step === []) {
+                continue;
+            }
+
+            $command = (string) array_key_first($step);
+            $value = $step[$command];
+
+            $goal = match ($command) {
+                'launchApp' => 'reach the home screen',
+                'tapOn' => $this->tapLandmark($value),
+                'assertVisible' => $this->visibleLandmark($value),
+                'extendedWaitUntil' => $this->waitLandmark($value),
+                default => null,
+            };
+
+            if ($goal !== null) {
                 $goals[] = $goal;
             }
         }
@@ -128,150 +123,36 @@ class MaestroGoals
         return $goals;
     }
 
-    /** @param array<string, true> $visited @return array<int, string> */
-    private function goalsForStep(mixed $step, string $baseDir, int $depth, array $visited): array
+    /** Navigation and creation are landmarks; an arbitrary tap is a step, not a goal. */
+    private function tapLandmark(mixed $target): ?string
     {
-        if (is_string($step)) {
-            return $this->goalFor($step, null, $baseDir, $depth, $visited);
+        $label = $this->labelFor($target);
+
+        if ($label === null) {
+            return null;
         }
 
-        if (! is_array($step) || $step === []) {
-            return [];
+        if ($this->isNavigation($target)) {
+            return 'open '.$label;
         }
 
-        $command = (string) array_key_first($step);
+        $first = strtolower(strtok($label, ' ') ?: '');
 
-        return $this->goalFor($command, $step[$command], $baseDir, $depth, $visited);
+        return in_array($first, self::CREATE_WORDS, true) ? $label : null;
     }
 
-    /** @param array<string, true> $visited @return array<int, string> */
-    private function goalFor(string $command, mixed $value, string $baseDir, int $depth, array $visited): array
+    private function visibleLandmark(mixed $target): ?string
     {
-        switch ($command) {
-            case 'launchApp':
-                return ['reach the home screen'];
+        $label = $this->labelFor($target);
 
-            case 'stopApp':
-                return ['close the app'];
-
-            case 'back':
-                return ['go back'];
-
-            case 'eraseText':
-                return ['clear the field'];
-
-            case 'swipe':
-                $direction = is_array($value) ? (string) ($value['direction'] ?? '') : '';
-
-                return [$direction === '' ? 'swipe the screen' : 'swipe '.$direction];
-
-            case 'pressKey':
-                return [is_string($value) && $value !== '' ? 'press '.$value : 'press a key'];
-
-            case 'waitForAnimationToEnd':
-                return ['wait for the screen to settle'];
-
-            case 'extendedWaitUntil':
-                $label = $this->labelFor(is_array($value) ? ($value['visible'] ?? null) : null);
-
-                return [$label === null ? 'wait until the screen is ready' : 'wait until '.$label.' is visible'];
-
-            case 'tapOn':
-            case 'longPressOn':
-            case 'doubleTapOn':
-                $label = $this->labelFor($value);
-
-                if ($label === null) {
-                    return ['tap an element'];
-                }
-
-                if ($command === 'longPressOn') {
-                    return ['long-press '.$label];
-                }
-
-                if ($command === 'doubleTapOn') {
-                    return ['double-tap '.$label];
-                }
-
-                return [$this->isNavigation($value) ? 'open '.$label : 'tap '.$label];
-
-            case 'inputText':
-                $text = is_string($value) ? trim($value) : '';
-
-                return [$text === '' ? 'type into the field' : 'type "'.$this->shorten($text).'"'];
-
-            case 'assertVisible':
-                $label = $this->labelFor($value);
-
-                return [$label === null ? 'the expected element is visible' : $label.' is visible'];
-
-            case 'assertNotVisible':
-                $label = $this->labelFor($value);
-
-                return [$label === null ? 'the unwanted element is gone' : $label.' is not visible'];
-
-            case 'scroll':
-                return ['scroll the screen'];
-
-            case 'scrollUntilVisible':
-                $label = $this->labelFor(is_array($value) ? ($value['element'] ?? null) : null);
-
-                return [$label === null ? 'scroll the screen' : 'scroll until '.$label.' is visible'];
-
-            case 'runFlow':
-                return $this->goalsFromRunFlow($value, $baseDir, $depth, $visited);
-        }
-
-        return [];
+        return $label === null ? null : $label.' is visible';
     }
 
-    /** @param array<string, true> $visited @return array<int, string> */
-    private function goalsFromRunFlow(mixed $value, string $baseDir, int $depth, array $visited): array
+    private function waitLandmark(mixed $value): ?string
     {
-        if (is_string($value) && $value !== '') {
-            return $this->goalsFromFile($value, $baseDir, $depth, $visited);
-        }
+        $label = $this->labelFor(is_array($value) ? ($value['visible'] ?? null) : null);
 
-        if (! is_array($value)) {
-            return [];
-        }
-
-        if (isset($value['commands']) && is_array($value['commands'])) {
-            return $this->goalsFromSteps($value['commands'], $baseDir, $depth + 1, $visited);
-        }
-
-        foreach (['file', 'flow'] as $key) {
-            if (isset($value[$key]) && is_string($value[$key]) && $value[$key] !== '') {
-                return $this->goalsFromFile($value[$key], $baseDir, $depth, $visited);
-            }
-        }
-
-        return [];
-    }
-
-    /** @param array<string, true> $visited @return array<int, string> */
-    private function goalsFromFile(string $reference, string $baseDir, int $depth, array $visited): array
-    {
-        if ($depth >= self::MAX_DEPTH) {
-            return [];
-        }
-
-        $path = $baseDir === '' ? $reference : rtrim($baseDir, '/').'/'.$reference;
-        $real = realpath($path) ?: $path;
-
-        if (isset($visited[$real])) {
-            return [];
-        }
-
-        // A flow the run was not handed is still a step the test expects; name it
-        // rather than dropping it silently.
-        if (! is_file($real)) {
-            return ['complete the '.$this->flowName($reference).' flow'];
-        }
-
-        $visited[$real] = true;
-
-        return $this->fromYaml((string) file_get_contents($real), dirname($real), $depth + 1, $visited);
+        return $label === null ? null : $label.' appears';
     }
 
     private function isNavigation(mixed $target): bool
@@ -303,11 +184,7 @@ class MaestroGoals
             return null;
         }
 
-        if (is_string($target) && trim($target) !== '') {
-            return $this->humanize($target, false);
-        }
-
-        return null;
+        return is_string($target) && trim($target) !== '' ? $this->humanize($target, false) : null;
     }
 
     private function humanize(string $value, bool $fromId): string
@@ -328,21 +205,8 @@ class MaestroGoals
         }
 
         $value = str_replace(['_', '-'], ' ', $value);
-        $value = (string) preg_replace('/\s+/', ' ', $value);
+        $value = trim((string) preg_replace('/\s+/', ' ', $value));
 
-        return $this->shorten(trim($value));
-    }
-
-    private function flowName(string $reference): string
-    {
-        $name = basename($reference);
-        $name = (string) preg_replace('/\.ya?ml$/i', '', $name);
-
-        return $this->humanize($name, false);
-    }
-
-    private function shorten(string $value): string
-    {
         return mb_strlen($value) > self::MAX_LABEL_LENGTH
             ? mb_substr($value, 0, self::MAX_LABEL_LENGTH).'…'
             : $value;

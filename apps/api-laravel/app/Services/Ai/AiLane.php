@@ -21,13 +21,38 @@ class AiLane
         private int $pollMilliseconds = 0,
     ) {}
 
-    /** The goal list for a run: the Maestro flows said what, in plain language. */
-    public function mission(string $repoDir, array $tests): string
+    /**
+     * The mission for a run. The flows give the shape of the journey, not a
+     * script: the lane is told to behave like a person and adapt, because the
+     * point of the lane is to discover how the app really behaves today.
+     *
+     * @param array<int, string> $tests
+     */
+    public function mission(string $repoDir, array $tests, string $appId): string
     {
         $root = rtrim($repoDir, '/').'/'.MaestroWorkspace::MAESTRO_DIR;
         $resolved = (new MaestroWorkspace)->resolveFlows($root, $tests);
+        $goals = $this->goals->fromFlowFiles($resolved['flows']);
 
-        return $this->goals->toText($this->goals->fromFlowFiles($resolved['flows']));
+        $lines = [
+            'You are a real user of the app'.($appId === '' ? '' : ' '.$appId).' on the device.'
+                .' Explore it the way a person would and make sure the journey below works end to end.',
+            "The landmarks come from the app's own test suite: they show the general flow, not a script."
+                .' Do not follow them step by step — adapt to the screens you actually find.',
+            '',
+            'Journey: '.($tests === [] ? "the app's main flows" : implode(', ', $tests)),
+        ];
+
+        if ($goals !== []) {
+            $lines[] = '';
+            $lines[] = 'Landmarks to confirm:';
+
+            foreach (array_values($goals) as $index => $goal) {
+                $lines[] = ($index + 1).'. '.$goal;
+            }
+        }
+
+        return implode("\n", $lines);
     }
 
     /**

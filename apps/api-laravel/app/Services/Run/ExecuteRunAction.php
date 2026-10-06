@@ -960,13 +960,14 @@ class ExecuteRunAction
 
         $lane = new AiLane;
         $tests = $this->maestro->withSmokeFirst($this->run->getTests() ?? []);
+        $appId = $lane->appId($repoDir, $tests);
 
         $result = $lane->run(
             (string) $this->run->getId(),
-            $lane->mission($repoDir, $tests),
+            $lane->mission($repoDir, $tests, $appId),
             $connection,
             $this->device(),
-            $lane->appId($repoDir, $tests),
+            $appId,
         );
 
         $this->storeAiArtifacts($result);
