@@ -64,6 +64,8 @@ export function AutomationWorkspace() {
   const [tests, setTests] = useState<MaestroTest[] | null>(null);
   const [check, setCheck] = useState<BranchCheck | null>(null);
   const [triggers, setTriggers] = useState<Trigger[]>([]);
+  // Until the first answer arrives, an empty list means "not loaded", not "none".
+  const [loaded, setLoaded] = useState(false);
 
   const [filter, setFilter] = useState("");
   const [project, setProject] = useState<Project | null>(null);
@@ -87,6 +89,7 @@ export function AutomationWorkspace() {
 
     const data = (await response.json()) as { triggers?: Trigger[] };
     setTriggers(data.triggers ?? []);
+    setLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -286,7 +289,12 @@ export function AutomationWorkspace() {
           </div>
         </div>
 
-        {triggers.length === 0 ? (
+        {!loaded ? (
+          <div className="stack" aria-busy="true">
+            <span className="skeleton" style={{ height: 132, borderRadius: 16 }} />
+            <span className="skeleton" style={{ height: 132, borderRadius: 16 }} />
+          </div>
+        ) : triggers.length === 0 ? (
           <div className="empty-state">
             <Icon name="bolt" size={40} />
             <h3 className="md-title">Nothing is automated yet</h3>
