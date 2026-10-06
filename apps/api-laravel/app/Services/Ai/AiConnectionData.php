@@ -11,5 +11,7 @@ class AiConnectionData
         public readonly string $jevBaseUrl,
         public readonly string $jevToken,
         public readonly int $maxSteps = AiClient::DEFAULT_MAX_STEPS,
+        public readonly bool $aiLaneEnabled = true,
+        public readonly bool $shareReportToTelegram = false,
     ) {}
 }

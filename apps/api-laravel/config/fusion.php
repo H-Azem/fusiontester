@@ -90,4 +90,16 @@ return [
         'scripts' => env('SIDECAR_SCRIPTS', base_path('../runner/src/scripts')),
         'timeout_seconds' => (int) env('SIDECAR_TIMEOUT', 1200),
     ],
+
+    /*
+     * The AI lane drives the app on the device with the Command Code CLI, inside a
+     * sandboxed container that has no repository, no database and no Docker socket.
+     * The API writes a request for the host runner to pick up and waits for its
+     * verdict; nothing here can start a container itself.
+     */
+    'ai' => [
+        'image' => env('FUSION_AI_IMAGE', 'tester-ai-tester'),
+        'timeout_seconds' => (int) env('FUSION_AI_TIMEOUT', 1800),
+        'poll_ms' => (int) env('FUSION_AI_POLL_MS', 1000),
+    ],
 ];

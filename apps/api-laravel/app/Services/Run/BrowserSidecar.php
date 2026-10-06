@@ -5,24 +5,21 @@ namespace App\Services\Run;
 use Symfony\Component\Process\Process;
 
 /**
- * Shells out to the Node sidecar for the two stages that need a real browser.
+ * Shells out to the Node sidecar for the one stage that needs a real browser.
  *
  * Reading a Flutter web app's runtime state means reading its accessibility tree
  * over CDP. Rather than reimplement that in PHP, the capability stays where it
  * was built and this service speaks a small JSON contract to it, so a missing
  * sidecar degrades into a clear message instead of a silent wrong answer.
+ *
+ * The AI lane is no longer one of those stages: it drives the app on the device
+ * with the Command Code CLI, so it went to the host runner instead.
  */
 class BrowserSidecar
 {
     public function browse(string $url): array
     {
         return $this->call('sidecar-browse.ts', [$url], null);
-    }
-
-    /** @param array<string, mixed> $payload */
-    public function runAi(array $payload): array
-    {
-        return $this->call('sidecar-ai.ts', [], $payload);
     }
 
     public function available(): bool

@@ -8,6 +8,7 @@ use App\Repositories\Run\RunRepository;
 use App\Repositories\Settings\AiConnectionRepository;
 use App\Repositories\Settings\GitlabConnectionRepository;
 use App\Http\Resources\RunArtifacts;
+use App\Services\Ai\AiLane;
 use App\Services\Gitlab\GitlabClient;
 use App\Services\Telegram\TelegramNotifier;
 use Symfony\Component\Process\Process;
@@ -16,10 +17,11 @@ use Symfony\Component\Process\Process;
  * Runs one job to completion.
  *
  * The stages that shell out to real tools (git, Flutter, Maestro) are ported here
- * directly. The two that need a real browser — the boot check and the AI lane —
- * are delegated to the Node sidecar, because reading a Flutter web app's runtime
- * state means reading its accessibility tree over CDP. When the sidecar is
- * unavailable those stages fail with that reason rather than reporting a pass.
+ * directly. The boot check is delegated to the Node sidecar, because reading a
+ * Flutter web app's runtime state means reading its accessibility tree over CDP.
+ * The AI lane instead writes a request for the host runner, which drives the app
+ * on the device with the Command Code CLI inside a sandboxed container — this
+ * process is given no Docker socket, so it cannot start one itself.
  */
 class ExecuteRunAction
 {
@@ -133,10 +135,10 @@ class ExecuteRunAction
 
             if (! in_array(Run::KIND_AI, $kinds, true)) {
                 $this->runs->skipStage($this->run, 'ai', 'Skipped — the AI check was not selected.');
-            } elseif ($android) {
-                $this->runs->skipStage($this->run, 'ai', 'Skipped — the AI lane reads a web app over CDP, so it runs on the web lane only.');
             } elseif (! $aiLaneEnabled) {
                 $this->runs->skipStage($this->run, 'ai', 'Skipped — the AI lane is turned off in Settings.');
+            } elseif (! $android) {
+                $this->runs->skipStage($this->run, 'ai', 'Skipped — the AI lane drives the app on the Android device.');
             } else {
                 $this->ai($workspace, $repoDir, $url);
             }
@@ -937,6 +939,10 @@ class ExecuteRunAction
         );
     }
 
+    /**
+     * Drives the app on the device, not in a browser: the lane reads the
+     * accessibility tree over adb and reports each goal as pass or fail.
+     */
     private function ai(string $workspace, string $repoDir, string $url): void
     {
         $this->runs->startStage($this->run, 'ai');
@@ -946,63 +952,126 @@ class ExecuteRunAction
             $this->runs->failRun(
                 $this->run,
                 'ai',
-                'The AI connection is not configured. Add a jev token and an OpenAI-compatible endpoint in Settings.'
+                'The AI connection is not configured. Add an OpenAI-compatible endpoint and a token in Settings.'
             );
 
             return;
         }
 
-        $result = $this->sidecar->runAi([
-            'url' => $url,
-            'repoDir' => $repoDir,
-            'runDir' => $workspace,
-            'tests' => $this->run->getTests() ?? [],
-            'maxSteps' => $connection->maxSteps,
-            'config' => [
-                'openaiBaseUrl' => $connection->openaiBaseUrl,
-                'openaiModel' => $connection->model,
-                'openaiToken' => $connection->openaiToken,
-                'jevBaseUrl' => $connection->jevBaseUrl,
-                'jevToken' => $connection->jevToken,
-            ],
-        ]);
+        $lane = new AiLane;
+        $tests = $this->maestro->withSmokeFirst($this->run->getTests() ?? []);
 
-        if ($result['data'] === null) {
-            $this->runs->failRun($this->run, 'ai', 'The AI lane could not run: '.$result['error']);
+        $result = $lane->run(
+            (string) $this->run->getId(),
+            $lane->mission($repoDir, $tests),
+            $connection,
+            $this->device(),
+            $lane->appId($repoDir, $tests),
+        );
+
+        $this->storeAiArtifacts($result);
+        $lane->forget($result['root']);
+
+        if ($result['exit'] === null) {
+            $this->runs->failRun($this->run, 'ai', 'The AI lane did not answer in time.');
 
             return;
         }
 
-        $data = $result['data'];
-        $this->saveScreenshot($data['screenshot'] ?? null, 'ai-failure.png');
+        $goals = is_array($result['report']['goals'] ?? null) ? $result['report']['goals'] : [];
+        $summary = (string) ($result['report']['summary'] ?? $result['result']['finalText'] ?? '');
+        $trace = $this->formatAiGoals($goals);
 
-        $trace = '';
-        foreach ((array) ($data['steps'] ?? []) as $step) {
-            $trace .= sprintf(
-                "%s. %s — %s\n     expected: %s\n     observed: %s\n",
-                $step['step'] ?? '?',
-                $step['action'] ?? '?',
-                $step['detail'] ?? '',
-                $step['expect'] ?? '(none)',
-                $step['check'] ?? ''
-            );
-        }
-
-        if (empty($data['ok'])) {
+        if ($result['exit'] !== 0 || $this->aiGoalsFailed($goals)) {
             $this->runs->failRun($this->run, 'ai', implode("\n", array_filter([
-                (string) ($data['summary'] ?? 'The AI lane reported a failure.'),
-                isset($data['diagnosis']) ? "\nDiagnosis:\n".$data['diagnosis'] : null,
-                $trace !== '' ? "\nSteps:\n".$trace : null,
+                $summary !== '' ? $summary : 'The AI lane reported a failure.',
+                $trace,
+                $result['stderr'] !== '' ? "\nDiagnosis:\n".$result['stderr'] : null,
             ])));
 
             return;
         }
 
-        $this->runs->finishStage(
-            $this->run,
-            'ai',
-            implode("\n", array_filter([(string) ($data['summary'] ?? 'AI checks passed.'), $trace !== '' ? "\nSteps:\n".$trace : null]))
-        );
+        $this->runs->finishStage($this->run, 'ai', implode("\n", array_filter([
+            $summary !== '' ? $summary : 'AI checks passed.',
+            $trace,
+        ])));
+    }
+
+    /** The report and any failure frames the lane captured, kept like Maestro's. */
+    private function storeAiArtifacts(array $result): void
+    {
+        $runId = (string) $this->run->getId();
+        $work = (string) ($result['work'] ?? '');
+
+        if ($work === '') {
+            return;
+        }
+
+        // The report is kept as one self-contained file the panel can render: the
+        // agent's goals, plus the token usage from the CLI's result frame, which
+        // only the pipeline sees.
+        $report = is_file($work.'/report.json')
+            ? (json_decode((string) file_get_contents($work.'/report.json'), true) ?: [])
+            : [];
+
+        if (! is_array($report)) {
+            $report = [];
+        }
+
+        $usage = $result['result']['usage'] ?? null;
+        if (is_array($usage)) {
+            $report['usage'] = $usage;
+        }
+
+        if (($report['summary'] ?? '') === '' && isset($result['result']['finalText'])) {
+            $report['summary'] = (string) $result['result']['finalText'];
+        }
+
+        if ($report !== []) {
+            @mkdir(dirname(RunArtifacts::path($runId, RunArtifacts::AI_REPORT)), 0775, true);
+            file_put_contents(
+                RunArtifacts::path($runId, RunArtifacts::AI_REPORT),
+                json_encode($report, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+            );
+        }
+
+        foreach (glob($work.'/screenshots/*.png') ?: [] as $shot) {
+            $target = RunArtifacts::path($runId, RunArtifacts::AI_SHOTS.'/'.basename($shot));
+            @mkdir(dirname($target), 0775, true);
+            @copy($shot, $target);
+        }
+    }
+
+    private function formatAiGoals(array $goals): string
+    {
+        $lines = [];
+
+        foreach ($goals as $goal) {
+            if (! is_array($goal)) {
+                continue;
+            }
+
+            $lines[] = sprintf(
+                '%s %s — %s',
+                strtolower((string) ($goal['status'] ?? '')) === 'pass' ? '✓' : '✗',
+                (string) ($goal['text'] ?? '?'),
+                (string) ($goal['evidence'] ?? '')
+            );
+        }
+
+        return $lines === [] ? '' : "\nGoals:\n".implode("\n", $lines);
+    }
+
+    private function aiGoalsFailed(array $goals): bool
+    {
+        foreach ($goals as $goal) {
+            if (is_array($goal) && strtolower((string) ($goal['status'] ?? '')) === 'fail') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** The sidecar returns base64 so the frame can travel over stdout. */

@@ -107,6 +107,95 @@ function ScreenshotPanel({
   );
 }
 
+type AiGoal = { text?: string; status?: string; evidence?: string };
+
+type AiReport = {
+  summary?: string;
+  goals?: AiGoal[];
+  screenshots?: string[];
+  usage?: { inputTokens?: number; outputTokens?: number };
+};
+
+/**
+ * The lane's own verdict. It runs once the run is over and writes its report to
+ * disk, so this reads it once rather than polling.
+ */
+function AiReportPanel({ runId }: { runId: string }) {
+  const [report, setReport] = useState<AiReport | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const response = await fetch(`/api/runs/${runId}/ai-report`, { cache: "no-store" });
+      if (!response.ok) return;
+      const data = (await response.json()) as AiReport;
+      if (!cancelled) setReport(data);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [runId]);
+
+  const goals = report?.goals ?? [];
+  if (!report || (goals.length === 0 && !report.summary)) return null;
+
+  const failed = goals.filter((goal) => goal.status === "fail").length;
+  const usage = report.usage;
+  const tokens = usage ? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) : 0;
+  const shots = report.screenshots ?? [];
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>AI report</h2>
+          <p className="panel-sub">{report.summary ?? "The lane's verdict on each goal."}</p>
+        </div>
+        <StatusChip
+          status={failed > 0 ? "failed" : "passed"}
+          label={`${goals.length - failed}/${goals.length} goals`}
+        />
+      </div>
+
+      <ol className="stack" style={{ listStyle: "none", padding: 0, margin: 0 }}>
+        {goals.map((goal, index) => (
+          <li key={index} className="card filled">
+            <div className="row" style={{ justifyContent: "space-between", gap: 12 }}>
+              <span className="md-title-sm">{goal.text ?? "(unnamed goal)"}</span>
+              <StatusChip
+                status={goal.status === "fail" ? "failed" : "passed"}
+                label={goal.status === "fail" ? "fail" : "pass"}
+              />
+            </div>
+            {goal.evidence && <p className="md-body-sm muted">{goal.evidence}</p>}
+          </li>
+        ))}
+      </ol>
+
+      {tokens > 0 && (
+        <p className="md-body-sm muted">
+          {tokens.toLocaleString()} tokens
+          {usage?.inputTokens ? ` · ${usage.inputTokens.toLocaleString()} in` : ""}
+          {usage?.outputTokens ? ` · ${usage.outputTokens.toLocaleString()} out` : ""}
+        </p>
+      )}
+
+      {shots.length > 0 && (
+        <div className="row" style={{ flexWrap: "wrap" }}>
+          {shots.map((file) => (
+            <a key={file} href={`/api/runs/${runId}/ai-shot/${file}`} target="_blank" rel="noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="live-frame" src={`/api/runs/${runId}/ai-shot/${file}`} alt={file} />
+            </a>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function RunDetail({ id }: { id: string }) {
   const { run, error, loaded } = useRun(id);
 
@@ -276,6 +365,8 @@ export function RunDetail({ id }: { id: string }) {
           note="The screen the AI lane captured and analysed when a step did not land."
         />
       )}
+
+      {run.hasAiReport && <AiReportPanel runId={run.id} />}
 
       <div className="row">
         <Link href="/projects" className="md-button tonal">

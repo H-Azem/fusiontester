@@ -25,6 +25,9 @@ RUN useradd --create-home --shell /bin/sh tester \
 # only add model calls. The lane does one thing: run the mission.
 COPY settings.json /home/tester/.commandcode/settings.json
 COPY settings.json /home/tester/lane/.commandcode/settings.json
+# The lane's job, in the CLI's own project-memory file: the adb workflow and the
+# report contract it must leave behind.
+COPY AGENTS.md /home/tester/lane/AGENTS.md
 COPY entrypoint.sh /usr/local/bin/ai-tester-entrypoint.sh
 
 RUN chmod +x /usr/local/bin/ai-tester-entrypoint.sh \

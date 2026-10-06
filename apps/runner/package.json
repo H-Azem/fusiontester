@@ -6,8 +6,7 @@
   "//": "The only Node part left: the browser-driven stages the Laravel service shells out to.",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "browse": "node --import tsx src/scripts/sidecar-browse.ts",
-    "ai": "node --import tsx src/scripts/sidecar-ai.ts"
+    "browse": "node --import tsx src/scripts/sidecar-browse.ts"
   },
   "dependencies": {
     "puppeteer-core": "^25.11.0"

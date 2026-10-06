@@ -30,7 +30,9 @@ class AiConnectionRepository
             $this->box->decrypt((string) $row->getOpenaiTokenCiphertext()),
             (string) $row->getJevBaseUrl(),
             $this->box->decrypt((string) $row->getJevTokenCiphertext()),
-            (int) $row->getMaxSteps()
+            (int) $row->getMaxSteps(),
+            (bool) $row->getAiLaneEnabled(),
+            (bool) $row->getShareReportToTelegram(),
         );
     }
 

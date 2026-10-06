@@ -13,6 +13,12 @@ class RunArtifacts
     /** The newest frame of the live view; overwritten in place as the run goes. */
     const LIVE_FRAME = 'live.jpg';
 
+    /** The AI lane's verdict: every goal with PASS/FAIL and its evidence. */
+    const AI_REPORT = 'ai-report.json';
+
+    /** Downscaled frames the AI lane captured when a goal failed. */
+    const AI_SHOTS = 'ai';
+
     public static function workspace(string $runId): string
     {
         return storage_path('app/fusion/runs/'.$runId);
@@ -31,5 +37,10 @@ class RunArtifacts
     public static function hasScreenshot(string $runId, string $file): bool
     {
         return is_file(self::path($runId, $file));
+    }
+
+    public static function hasAiReport(string $runId): bool
+    {
+        return is_file(self::path($runId, self::AI_REPORT));
     }
 }

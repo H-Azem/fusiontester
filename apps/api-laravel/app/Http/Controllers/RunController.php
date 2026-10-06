@@ -93,6 +93,31 @@ class RunController extends Controller
         return $this->serveArtifact($id, 'ai-failure.png');
     }
 
+    /** The lane's report: every goal, its verdict and the evidence for it. */
+    public function aiReport(string $id)
+    {
+        $path = RunArtifacts::path($id, RunArtifacts::AI_REPORT);
+
+        if (! is_file($path)) {
+            return $this->legacyResponse(['error' => 'not_found'], Response::HTTP_NOT_FOUND);
+        }
+
+        return ResponseFactory::file($path, [
+            'Content-Type' => 'application/json',
+            'Cache-Control' => 'no-store, max-age=0',
+        ]);
+    }
+
+    /** One frame the lane captured when a goal failed. */
+    public function aiShot(string $id, string $file)
+    {
+        if (preg_match('/^[A-Za-z0-9._-]+$/', $file) !== 1) {
+            return $this->legacyResponse(['error' => 'not_found'], Response::HTTP_NOT_FOUND);
+        }
+
+        return $this->serveArtifact($id, RunArtifacts::AI_SHOTS.'/'.$file);
+    }
+
     /**
      * The newest frame of the live view. It is overwritten in place while the run
      * goes, so it must never be cached — the dashboard polls this URL.
