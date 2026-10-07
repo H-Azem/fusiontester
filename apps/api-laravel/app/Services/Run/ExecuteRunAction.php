@@ -1059,6 +1059,12 @@ class ExecuteRunAction
             );
         }
 
+        // The lane's stream records which model answered, which tools ran, and any
+        // permission refusal — the only place those are visible after the run.
+        if (is_file($work.'/agent.ndjson')) {
+            @copy($work.'/agent.ndjson', RunArtifacts::path($runId, RunArtifacts::AI_TRANSCRIPT));
+        }
+
         foreach (glob($work.'/screenshots/*.png') ?: [] as $shot) {
             $target = RunArtifacts::path($runId, RunArtifacts::AI_SHOTS.'/'.basename($shot));
             @mkdir(dirname($target), 0775, true);

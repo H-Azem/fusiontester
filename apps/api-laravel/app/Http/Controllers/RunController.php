@@ -120,6 +120,18 @@ class RunController extends Controller
         return ResponseFactory::file($path, ['Content-Type' => 'text/plain; charset=UTF-8']);
     }
 
+    /** The lane's own stream: models, tools, usage and any permission refusal. */
+    public function aiTranscript(string $id)
+    {
+        $path = RunArtifacts::path($id, RunArtifacts::AI_TRANSCRIPT);
+
+        if (! is_file($path)) {
+            return $this->legacyResponse(['error' => 'not_found'], Response::HTTP_NOT_FOUND);
+        }
+
+        return ResponseFactory::file($path, ['Content-Type' => 'application/x-ndjson; charset=UTF-8']);
+    }
+
     /** One frame the lane captured when a goal failed. */
     public function aiShot(string $id, string $file)
     {

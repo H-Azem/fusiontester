@@ -79,6 +79,7 @@ Route::middleware('auth.session')->group(function () {
     Route::get('runs/{id}/ai-screenshot', [RunController::class, 'aiScreenshot']);
     Route::get('runs/{id}/ai-report', [RunController::class, 'aiReport']);
     Route::get('runs/{id}/ai-mission', [RunController::class, 'aiMission']);
+    Route::get('runs/{id}/ai-transcript', [RunController::class, 'aiTranscript']);
     Route::get('runs/{id}/ai-shot/{file}', [RunController::class, 'aiShot'])
         ->where('file', '[A-Za-z0-9._-]+');
 });

@@ -2,6 +2,7 @@
 
 namespace App\Services\Ai;
 
+use App\Services\Gitlab\FlutterInspector;
 use App\Services\Run\MaestroWorkspace;
 
 /**
@@ -34,23 +35,41 @@ class AiLane
         $resolved = (new MaestroWorkspace)->resolveFlows($root, $tests);
         $goals = $this->goals->fromFlowFiles($resolved['flows']);
 
+        // Smoke is the sign-in, not a feature to test, so it is kept out of the list.
+        $features = array_values(array_filter(
+            $tests,
+            fn (string $test) => strcasecmp($test, MaestroWorkspace::SMOKE_FLOW) !== 0
+        ));
+
         $lines = [
             'You are a real user of the app'.($appId === '' ? '' : ' '.$appId).' on the device.'
-                .' Explore it the way a person would and make sure the journey below works end to end.',
-            "The landmarks come from the app's own test suite: they show the general flow, not a script."
-                .' Do not follow them step by step — adapt to the screens you actually find.',
-            'Stay on this journey. Explore freely, but do not wander into unrelated features:'
-                .' if a landmark cannot be reached, report that instead of testing something else.',
-            '',
-            'Journey: '.($tests === [] ? "the app's main flows" : implode(', ', $tests)),
+                .' Test the features below the way a person would: use each one properly, not just open it.',
         ];
+
+        if ($features !== []) {
+            $lines[] = '';
+            $lines[] = 'Features to test:';
+
+            foreach (array_values($features) as $index => $feature) {
+                $lines[] = ($index + 1).'. '.FlutterInspector::displayNameFor((string) $feature);
+            }
+        } else {
+            $lines[] = '';
+            $lines[] = "Test the app's main flows.";
+        }
+
+        $lines[] = '';
+        $lines[] = 'Behave like a real user. Within each feature do what a user would: open it, use it, and'
+            .' carry its main action through to the end — for a list, actually add an item; for a form,'
+            .' actually submit it. Stay within these features and do not test unrelated parts of the app;'
+            .' if something cannot be reached, report that rather than switching features.';
 
         if ($goals !== []) {
             $lines[] = '';
-            $lines[] = 'Landmarks to confirm:';
+            $lines[] = "Signals from the app's own test suite (inspiration only — not a script):";
 
-            foreach (array_values($goals) as $index => $goal) {
-                $lines[] = ($index + 1).'. '.$goal;
+            foreach (array_values($goals) as $goal) {
+                $lines[] = '- '.$goal;
             }
         }
 

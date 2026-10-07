@@ -22,6 +22,9 @@ class RunArtifacts
     /** Exactly what the lane was told, so a run that goes somewhere odd is explainable. */
     const AI_MISSION = 'ai-mission.txt';
 
+    /** The lane's own NDJSON stream: models, tools and permission decisions. */
+    const AI_TRANSCRIPT = 'ai-transcript.ndjson';
+
     public static function workspace(string $runId): string
     {
         return storage_path('app/fusion/runs/'.$runId);
