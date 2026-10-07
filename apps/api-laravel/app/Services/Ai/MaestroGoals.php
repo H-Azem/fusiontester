@@ -62,55 +62,106 @@ class MaestroGoals
     }
 
     /**
-     * The values the flows type in — a staff PIN, a login — so the lane can get past
-     * a sign-in the way the test suite does. Shared flows are included here because
-     * that is where the sign-in lives; the goal list itself stays short and
-     * inspiration-only, but without these the lane cannot get past the login screen.
+     * How the app is entered, straight from the smoke flow.
+     *
+     * Smoke always exists and always says how the app is signed into, and a team
+     * keeps the actual sign-in there or in a subflow it runs. This is the one place
+     * `runFlow` is followed — the lane needs the real values (a PIN, a company
+     * name) to get past the login/setup screen, and cannot invent them.
      *
      * @param  array<int, string>  $files
      * @return array<int, string>
      */
-    public function inputs(array $files): array
+    public function signIn(array $files): array
     {
-        $found = [];
+        $lines = [];
+        $visited = [];
+
+        $this->walk($files, '', 0, $visited, $lines);
+
+        return $lines;
+    }
+
+    /**
+     * @param  array<int, string>  $files
+     * @param  array<string, true>  $visited
+     * @param  array<int, string>  $lines
+     */
+    private function walk(array $files, string $baseDir, int $depth, array &$visited, array &$lines): void
+    {
+        if ($depth > 3 || count($lines) >= 16) {
+            return;
+        }
 
         foreach ($files as $file) {
-            if (! is_file($file)) {
+            $path = $baseDir === '' || str_starts_with($file, '/')
+                ? $file
+                : rtrim($baseDir, '/').'/'.$file;
+            $real = realpath($path) ?: $path;
+
+            if (isset($visited[$real]) || ! is_file($real)) {
                 continue;
             }
 
-            $label = null;
+            $visited[$real] = true;
+            $references = [];
 
-            foreach ($this->steps((string) file_get_contents($file)) as $step) {
-                if (! is_array($step) || $step === []) {
+            foreach ($this->steps((string) file_get_contents($real)) as $step) {
+                $command = is_array($step) ? (string) array_key_first($step) : (string) $step;
+                $value = is_array($step) ? $step[$command] : null;
+
+                if ($command === 'runFlow') {
+                    $references = array_merge($references, $this->references($value));
                     continue;
                 }
 
-                $command = (string) array_key_first($step);
-                $value = $step[$command];
+                $line = $this->signInLine($command, $value);
 
-                if ($command === 'tapOn') {
-                    $label = $this->labelFor($value) ?? $label;
-                    continue;
+                if ($line !== null && ! in_array($line, $lines, true)) {
+                    $lines[] = $line;
+
+                    if (count($lines) >= 16) {
+                        return;
+                    }
                 }
+            }
 
-                if ($command !== 'inputText' || ! is_string($value) || trim($value) === '') {
-                    continue;
-                }
+            $this->walk($references, dirname($real), $depth + 1, $visited, $lines);
+        }
+    }
 
-                $line = ($label === null ? 'a field' : $label).' = "'.$value.'"';
+    /** @return array<int, string> */
+    private function references(mixed $value): array
+    {
+        if (is_string($value) && $value !== '') {
+            return [$value];
+        }
 
-                if (! in_array($line, $found, true)) {
-                    $found[] = $line;
-                }
+        if (! is_array($value)) {
+            return [];
+        }
 
-                if (count($found) >= 6) {
-                    return $found;
-                }
+        $found = [];
+
+        foreach (['file', 'flow'] as $key) {
+            if (isset($value[$key]) && is_string($value[$key]) && $value[$key] !== '') {
+                $found[] = $value[$key];
             }
         }
 
         return $found;
+    }
+
+    private function signInLine(string $command, mixed $value): ?string
+    {
+        return match ($command) {
+            'tapOn' => ($label = $this->labelFor($value)) === null ? null : 'tap '.$label,
+            'longPressOn' => ($label = $this->labelFor($value)) === null ? null : 'long-press '.$label,
+            'inputText' => is_string($value) && trim($value) !== '' ? 'type "'.$value.'"' : null,
+            'pressKey' => is_string($value) && $value !== '' ? 'press '.$value : null,
+            'assertVisible' => ($label = $this->labelFor($value)) === null ? null : 'see '.$label,
+            default => null,
+        };
     }
 
     /**

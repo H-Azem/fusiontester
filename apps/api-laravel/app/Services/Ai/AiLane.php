@@ -34,10 +34,14 @@ class AiLane
         $resolved = (new MaestroWorkspace)->resolveFlows($root, $tests);
         $goals = $this->goals->fromFlowFiles($resolved['flows']);
 
-        // The sign-in lives in the shared flows, so they are read for the values the
-        // lane needs to get past a login — never for more steps to follow.
-        $shared = glob($root.'/'.MaestroWorkspace::FLOWS_DIR.'/shared/*.yaml') ?: [];
-        $inputs = $this->goals->inputs(array_merge($resolved['flows'], $shared));
+        // Smoke always says how the app is entered, so the lane is handed that — the
+        // one place the suite's own steps are given, because the values (a PIN, a
+        // company name) cannot be invented.
+        $smoke = array_values(array_filter(
+            $resolved['flows'],
+            fn (string $file) => str_contains($file, '/'.MaestroWorkspace::SMOKE_FLOW.'/')
+        ));
+        $signIn = $this->goals->signIn($smoke);
 
         $lines = [
             'You are a real user of the app'.($appId === '' ? '' : ' '.$appId).' on the device.'
@@ -57,12 +61,13 @@ class AiLane
             }
         }
 
-        if ($inputs !== []) {
+        if ($signIn !== []) {
             $lines[] = '';
-            $lines[] = 'Sign-in values from the test suite (use them to get past any login, then carry on like a normal user):';
+            $lines[] = 'How the app is entered, from its own smoke test (use it to get past the'
+                .' sign-in/setup screen, then carry on like a normal user):';
 
-            foreach ($inputs as $input) {
-                $lines[] = '- '.$input;
+            foreach ($signIn as $step) {
+                $lines[] = '- '.$step;
             }
         }
 
