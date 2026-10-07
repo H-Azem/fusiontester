@@ -1013,8 +1013,16 @@ class ExecuteRunAction
         if ($result['exit'] !== 0 || $this->aiGoalsFailed($goals)) {
             $this->runs->failRun($this->run, 'ai', implode("\n", array_filter([
                 $summary !== '' ? $summary : 'The AI lane reported a failure.',
+                // The CLI exits 8 when it runs out of turns, which is not the run's
+                // own diagnosis — say what actually happened.
+                $result['exit'] === 8
+                    ? 'The lane ran out of steps before it finished; raise "Maximum steps per test" if the journey is long.'
+                    : null,
                 $trace,
-                $result['stderr'] !== '' ? "\nDiagnosis:\n".$result['stderr'] : null,
+                // stderr carries the CLI's own notices (config confirmations, the
+                // max-turns warning). They are not a diagnosis, so they are labelled
+                // as notes rather than dressed up as one.
+                $result['stderr'] !== '' ? "\nLane notes:\n".$this->clipAiNotes($result['stderr']) : null,
             ])));
 
             return;
@@ -1075,6 +1083,14 @@ class ExecuteRunAction
             @mkdir(dirname($target), 0775, true);
             @copy($shot, $target);
         }
+    }
+
+    /** stderr is chatty; keep it short so it does not swamp the failure line. */
+    private function clipAiNotes(string $notes): string
+    {
+        $notes = trim($notes);
+
+        return mb_strlen($notes) <= 600 ? $notes : mb_substr($notes, 0, 600).'…';
     }
 
     private function formatAiGoals(array $goals): string
