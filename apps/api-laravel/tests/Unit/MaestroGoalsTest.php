@@ -110,6 +110,18 @@ class MaestroGoalsTest extends TestCase
         $this->assertNotContains('type "1234"', $goals);
     }
 
+    /**
+     * The lane is not handed the sign-in steps, but it does need the value the test
+     * suite types — otherwise it can never get past the login screen.
+     */
+    #[Test]
+    public function the_sign_in_values_are_offered_as_context(): void
+    {
+        $inputs = (new MaestroGoals)->inputs([$this->root.'/flows/shared/enter_staff_pin.yaml']);
+
+        $this->assertContains('pin field = "1234"', $inputs);
+    }
+
     #[Test]
     public function the_list_is_capped(): void
     {

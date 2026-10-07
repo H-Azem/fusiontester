@@ -62,6 +62,58 @@ class MaestroGoals
     }
 
     /**
+     * The values the flows type in — a staff PIN, a login — so the lane can get past
+     * a sign-in the way the test suite does. Shared flows are included here because
+     * that is where the sign-in lives; the goal list itself stays short and
+     * inspiration-only, but without these the lane cannot get past the login screen.
+     *
+     * @param  array<int, string>  $files
+     * @return array<int, string>
+     */
+    public function inputs(array $files): array
+    {
+        $found = [];
+
+        foreach ($files as $file) {
+            if (! is_file($file)) {
+                continue;
+            }
+
+            $label = null;
+
+            foreach ($this->steps((string) file_get_contents($file)) as $step) {
+                if (! is_array($step) || $step === []) {
+                    continue;
+                }
+
+                $command = (string) array_key_first($step);
+                $value = $step[$command];
+
+                if ($command === 'tapOn') {
+                    $label = $this->labelFor($value) ?? $label;
+                    continue;
+                }
+
+                if ($command !== 'inputText' || ! is_string($value) || trim($value) === '') {
+                    continue;
+                }
+
+                $line = ($label === null ? 'a field' : $label).' = "'.$value.'"';
+
+                if (! in_array($line, $found, true)) {
+                    $found[] = $line;
+                }
+
+                if (count($found) >= 6) {
+                    return $found;
+                }
+            }
+        }
+
+        return $found;
+    }
+
+    /**
      * A flow file is a config document plus a command list, split by `---`, and
      * Symfony's parser refuses more than one document — so the list is found by
      * parsing each document and keeping the one that is a list.

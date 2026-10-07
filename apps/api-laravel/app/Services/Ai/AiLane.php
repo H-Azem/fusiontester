@@ -34,6 +34,11 @@ class AiLane
         $resolved = (new MaestroWorkspace)->resolveFlows($root, $tests);
         $goals = $this->goals->fromFlowFiles($resolved['flows']);
 
+        // The sign-in lives in the shared flows, so they are read for the values the
+        // lane needs to get past a login — never for more steps to follow.
+        $shared = glob($root.'/'.MaestroWorkspace::FLOWS_DIR.'/shared/*.yaml') ?: [];
+        $inputs = $this->goals->inputs(array_merge($resolved['flows'], $shared));
+
         $lines = [
             'You are a real user of the app'.($appId === '' ? '' : ' '.$appId).' on the device.'
                 .' Explore it the way a person would and make sure the journey below works end to end.',
@@ -49,6 +54,15 @@ class AiLane
 
             foreach (array_values($goals) as $index => $goal) {
                 $lines[] = ($index + 1).'. '.$goal;
+            }
+        }
+
+        if ($inputs !== []) {
+            $lines[] = '';
+            $lines[] = 'Sign-in values from the test suite (use them to get past any login, then carry on like a normal user):';
+
+            foreach ($inputs as $input) {
+                $lines[] = '- '.$input;
             }
         }
 
