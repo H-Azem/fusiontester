@@ -27,7 +27,12 @@ class ExecuteRunAction
 {
     const COMMAND_TIMEOUT_SECONDS = 600;
 
-    const BUILD_TIMEOUT_SECONDS = 900;
+    /**
+     * A cold Android build on this host (Gradle dependencies plus Kotlin plugin
+     * compilation) runs to ~15 minutes, so the ceiling sits above that rather than
+     * killing a legitimate build at the boundary.
+     */
+    const BUILD_TIMEOUT_SECONDS = 1800;
 
     const MAESTRO_TIMEOUT_SECONDS = 1200;
 
