@@ -110,34 +110,6 @@ class MaestroGoalsTest extends TestCase
         $this->assertNotContains('type "1234"', $goals);
     }
 
-    /**
-     * The lane is not handed the journey step by step, but the smoke flow does say
-     * how the app is entered — and without that it can never get past the login.
-     */
-    #[Test]
-    public function the_smoke_flow_says_how_to_sign_in(): void
-    {
-        $steps = (new MaestroGoals)->signIn([$this->root.'/flows/smoke/smoke.yaml']);
-
-        $this->assertContains('tap settings menu', $steps);
-        $this->assertContains('see home screen', $steps);
-    }
-
-    #[Test]
-    public function a_smoke_flow_follows_the_subflow_it_runs(): void
-    {
-        $this->write('smoke/subsignin.yaml', <<<'YAML'
-        appId: com.example.pos
-        ---
-        - runFlow: ../shared/enter_staff_pin.yaml
-        YAML);
-
-        $steps = (new MaestroGoals)->signIn([$this->root.'/flows/smoke/subsignin.yaml']);
-
-        $this->assertContains('tap pin field', $steps);
-        $this->assertContains('type "1234"', $steps);
-    }
-
     #[Test]
     public function the_list_is_capped(): void
     {

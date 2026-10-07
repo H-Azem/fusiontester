@@ -34,20 +34,13 @@ class AiLane
         $resolved = (new MaestroWorkspace)->resolveFlows($root, $tests);
         $goals = $this->goals->fromFlowFiles($resolved['flows']);
 
-        // Smoke always says how the app is entered, so the lane is handed that — the
-        // one place the suite's own steps are given, because the values (a PIN, a
-        // company name) cannot be invented.
-        $smoke = array_values(array_filter(
-            $resolved['flows'],
-            fn (string $file) => str_contains($file, '/'.MaestroWorkspace::SMOKE_FLOW.'/')
-        ));
-        $signIn = $this->goals->signIn($smoke);
-
         $lines = [
             'You are a real user of the app'.($appId === '' ? '' : ' '.$appId).' on the device.'
                 .' Explore it the way a person would and make sure the journey below works end to end.',
             "The landmarks come from the app's own test suite: they show the general flow, not a script."
                 .' Do not follow them step by step — adapt to the screens you actually find.',
+            'Stay on this journey. Explore freely, but do not wander into unrelated features:'
+                .' if a landmark cannot be reached, report that instead of testing something else.',
             '',
             'Journey: '.($tests === [] ? "the app's main flows" : implode(', ', $tests)),
         ];
@@ -67,16 +60,6 @@ class AiLane
             $lines[] = '';
             $lines[] = 'Test data for this app (entered by the team — use it to get in and to fill forms):';
             $lines[] = trim($givenData);
-        }
-
-        if ($signIn !== []) {
-            $lines[] = '';
-            $lines[] = 'How the app is entered, from its own smoke test (use it to get past the'
-                .' sign-in/setup screen, then carry on like a normal user):';
-
-            foreach ($signIn as $step) {
-                $lines[] = '- '.$step;
-            }
         }
 
         return implode("\n", $lines);

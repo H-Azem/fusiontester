@@ -19,6 +19,9 @@ class RunArtifacts
     /** Downscaled frames the AI lane captured when a goal failed. */
     const AI_SHOTS = 'ai';
 
+    /** Exactly what the lane was told, so a run that goes somewhere odd is explainable. */
+    const AI_MISSION = 'ai-mission.txt';
+
     public static function workspace(string $runId): string
     {
         return storage_path('app/fusion/runs/'.$runId);

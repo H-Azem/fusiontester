@@ -50,6 +50,19 @@ adb -s <device> shell input swipe <x1> <y1> <x2> <y2> 400
 
 After each action, dump again and confirm the screen actually changed.
 
+## When the dump is not enough
+
+If a dump comes back empty, or the control you need carries no text, id or
+description, capture a frame and look at it:
+
+```
+adb -s <device> shell screencap -p /sdcard/look.png
+adb -s <device> pull /sdcard/look.png /work/look.png
+```
+
+then read `/work/look.png` with `read_file`. This only helps when the model can see
+images — if it cannot, go back to the dump rather than guessing.
+
 ## The mission
 
 `/work/mission.txt` is the journey. It is **inspiration** from the app's own test

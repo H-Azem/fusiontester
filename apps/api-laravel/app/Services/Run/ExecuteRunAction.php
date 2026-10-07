@@ -959,6 +959,7 @@ class ExecuteRunAction
         }
 
         $lane = new AiLane;
+        $runId = (string) $this->run->getId();
         $tests = $this->maestro->withSmokeFirst($this->run->getTests() ?? []);
         $appId = $lane->appId($repoDir, $tests);
 
@@ -969,14 +970,20 @@ class ExecuteRunAction
             ->first()
             ?->getAiContext() ?? '');
 
+        // Keep exactly what the lane was told, so a run that goes somewhere unexpected
+        // can be explained from the run itself rather than guessed at.
+        $mission = $lane->mission($repoDir, $tests, $appId, $givenData);
+        @mkdir(dirname(RunArtifacts::path($runId, RunArtifacts::AI_MISSION)), 0775, true);
+        file_put_contents(RunArtifacts::path($runId, RunArtifacts::AI_MISSION), $mission);
+
         // The lane can run for many minutes on the device, so the live view records
         // the whole time — otherwise a run whose only kind is ai has no frames at all.
         $live = $this->live->start($this->run, $workspace);
 
         try {
             $result = $lane->run(
-                (string) $this->run->getId(),
-                $lane->mission($repoDir, $tests, $appId, $givenData),
+                $runId,
+                $mission,
                 $connection,
                 $this->device(),
                 $appId,

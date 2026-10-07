@@ -108,6 +108,18 @@ class RunController extends Controller
         ]);
     }
 
+    /** Exactly what the lane was told to do, for when a run goes somewhere odd. */
+    public function aiMission(string $id)
+    {
+        $path = RunArtifacts::path($id, RunArtifacts::AI_MISSION);
+
+        if (! is_file($path)) {
+            return $this->legacyResponse(['error' => 'not_found'], Response::HTTP_NOT_FOUND);
+        }
+
+        return ResponseFactory::file($path, ['Content-Type' => 'text/plain; charset=UTF-8']);
+    }
+
     /** One frame the lane captured when a goal failed. */
     public function aiShot(string $id, string $file)
     {
