@@ -32,14 +32,16 @@ adb -s 172.17.0.1:5555 shell monkey -p com.example.pos -c android.intent.categor
 
 ```
 adb -s <device> shell uiautomator dump --compressed /sdcard/window_dump.xml
-adb -s <device> exec-out cat /sdcard/window_dump.xml
+adb -s <device> pull /sdcard/window_dump.xml /work/dump.xml
+ui-menu /work/dump.xml
 ```
 
-`--compressed` drops the nodes that carry no text, id or description. Keep it on:
-without it the dump is large enough that a few screens drain the whole step budget.
+`ui-menu` turns the dump into the few lines a person could act on: each names an
+element's id, its text, and the point to tap. **Read that, never the XML** — the raw
+dump is thousands of nodes on one line and would drain the whole step budget in a
+screen or two. `--compressed` stays on for the same reason.
 
-Each node has `text`, `resource-id`, `content-desc`, `class`, `clickable`, and
-`bounds="[x1,y1][x2,y2]"`. Tap a node's centre:
+Tap what the menu names, at the point it gives:
 
 ```
 adb -s <device> shell input tap <x> <y>
@@ -49,6 +51,14 @@ adb -s <device> shell input swipe <x1> <y1> <x2> <y2> 400
 ```
 
 After each action, dump again and confirm the screen actually changed.
+
+## If nothing is changing
+
+If two actions in a row leave the screen identical, that step is failing — change
+approach (long-press, scroll, go back) instead of repeating it. If five leave it
+identical, stop and write the report with what you have. A wrong guess repeated is
+worse than an honest "not reachable": it burns the whole step budget without telling
+anyone anything.
 
 ## When the dump is not enough
 

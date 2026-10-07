@@ -29,8 +29,10 @@ COPY settings.json /home/tester/lane/.commandcode/settings.json
 # report contract it must leave behind.
 COPY AGENTS.md /home/tester/lane/AGENTS.md
 COPY entrypoint.sh /usr/local/bin/ai-tester-entrypoint.sh
+# The lane reads this instead of the raw dump, which would drain its step budget.
+COPY ui-menu.sh /usr/local/bin/ui-menu
 
-RUN chmod +x /usr/local/bin/ai-tester-entrypoint.sh \
+RUN chmod +x /usr/local/bin/ai-tester-entrypoint.sh /usr/local/bin/ui-menu \
  && chown -R tester:tester /home/tester
 
 # Never root. A compromised agent owns nothing but its own home and the device.
