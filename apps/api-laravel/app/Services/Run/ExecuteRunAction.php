@@ -962,13 +962,21 @@ class ExecuteRunAction
         $tests = $this->maestro->withSmokeFirst($this->run->getTests() ?? []);
         $appId = $lane->appId($repoDir, $tests);
 
-        $result = $lane->run(
-            (string) $this->run->getId(),
-            $lane->mission($repoDir, $tests, $appId),
-            $connection,
-            $this->device(),
-            $appId,
-        );
+        // The lane can run for many minutes on the device, so the live view records
+        // the whole time — otherwise a run whose only kind is ai has no frames at all.
+        $live = $this->live->start($this->run, $workspace);
+
+        try {
+            $result = $lane->run(
+                (string) $this->run->getId(),
+                $lane->mission($repoDir, $tests, $appId),
+                $connection,
+                $this->device(),
+                $appId,
+            );
+        } finally {
+            $this->live->stop($live, $workspace);
+        }
 
         $this->storeAiArtifacts($result);
         $lane->forget($result['root']);

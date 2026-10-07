@@ -31,9 +31,12 @@ adb -s 172.17.0.1:5555 shell monkey -p com.example.pos -c android.intent.categor
 ## Reading the screen (text, never pixels)
 
 ```
-adb -s <device> shell uiautomator dump /sdcard/window_dump.xml
+adb -s <device> shell uiautomator dump --compressed /sdcard/window_dump.xml
 adb -s <device> exec-out cat /sdcard/window_dump.xml
 ```
+
+`--compressed` drops the nodes that carry no text, id or description. Keep it on:
+without it the dump is large enough that a few screens drain the whole step budget.
 
 Each node has `text`, `resource-id`, `content-desc`, `class`, `clickable`, and
 `bounds="[x1,y1][x2,y2]"`. Tap a node's centre:
