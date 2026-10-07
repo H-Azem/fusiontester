@@ -7,7 +7,7 @@ use App\Models\Contracts\BaseModelInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 
-#[Fillable([self::PROJECT_ID, self::ORIENTATION, self::PLATFORM, self::DART_DEFINES])]
+#[Fillable([self::PROJECT_ID, self::ORIENTATION, self::PLATFORM, self::DART_DEFINES, self::AI_CONTEXT])]
 class ProjectSetting extends Model implements BaseModelInterface
 {
     use HasConstantGetters;
@@ -21,6 +21,9 @@ class ProjectSetting extends Model implements BaseModelInterface
     const PLATFORM = 'platform';
 
     const DART_DEFINES = 'dart_defines';
+
+    /** What the AI lane must type to get in — a PIN, a login, a setup value. */
+    const AI_CONTEXT = 'ai_context';
 
     const ORIENTATION_HORIZONTAL = 'horizontal';
 

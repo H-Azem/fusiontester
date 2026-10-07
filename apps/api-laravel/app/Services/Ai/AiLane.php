@@ -28,7 +28,7 @@ class AiLane
      *
      * @param array<int, string> $tests
      */
-    public function mission(string $repoDir, array $tests, string $appId): string
+    public function mission(string $repoDir, array $tests, string $appId, string $givenData = ''): string
     {
         $root = rtrim($repoDir, '/').'/'.MaestroWorkspace::MAESTRO_DIR;
         $resolved = (new MaestroWorkspace)->resolveFlows($root, $tests);
@@ -59,6 +59,14 @@ class AiLane
             foreach (array_values($goals) as $index => $goal) {
                 $lines[] = ($index + 1).'. '.$goal;
             }
+        }
+
+        // The data the team typed for this app wins over anything inferred from the
+        // suite: it is the one place a PIN or a setup value is known to be right.
+        if (trim($givenData) !== '') {
+            $lines[] = '';
+            $lines[] = 'Test data for this app (entered by the team — use it to get in and to fill forms):';
+            $lines[] = trim($givenData);
         }
 
         if ($signIn !== []) {

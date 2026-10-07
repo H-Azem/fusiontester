@@ -26,12 +26,16 @@ class ProjectSettingsController extends Controller
             'orientation' => ['sometimes', 'in:horizontal,vertical'],
             'platform' => ['sometimes', 'in:web,android'],
             'dartDefines' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'aiContext' => ['sometimes', 'nullable', 'string', 'max:4000'],
         ]);
 
         $this->settings->save($projectId, [
             ProjectSetting::ORIENTATION => $validated['orientation'] ?? null,
             ProjectSetting::PLATFORM => $validated['platform'] ?? null,
             ProjectSetting::DART_DEFINES => $validated['dartDefines'] ?? null,
+            ProjectSetting::AI_CONTEXT => array_key_exists('aiContext', $validated)
+                ? (string) ($validated['aiContext'] ?? '')
+                : null,
         ]);
 
         return $this->legacyResponse($this->payload($projectId));
@@ -47,6 +51,7 @@ class ProjectSettingsController extends Controller
             'orientation' => $row?->getOrientation() ?? ProjectSetting::ORIENTATION_DEFAULT,
             'platform' => $row?->getPlatform() ?? ProjectSetting::PLATFORM_DEFAULT,
             'dartDefines' => (string) ($row?->getDartDefines() ?? ''),
+            'aiContext' => (string) ($row?->getAiContext() ?? ''),
             // Whether these are the project's own choices or just fallbacks: the
             // dashboard only overrides its defaults when nobody has chosen yet.
             'orientationSet' => $row?->getOrientation() !== null,

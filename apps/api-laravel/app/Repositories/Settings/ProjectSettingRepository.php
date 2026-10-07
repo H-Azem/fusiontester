@@ -29,6 +29,7 @@ class ProjectSettingRepository
             ProjectSetting::ORIENTATION,
             ProjectSetting::PLATFORM,
             ProjectSetting::DART_DEFINES,
+            ProjectSetting::AI_CONTEXT,
         ]));
 
         // A key the caller left out arrives as null, and those columns are NOT NULL:

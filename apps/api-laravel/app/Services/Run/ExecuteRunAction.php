@@ -962,6 +962,13 @@ class ExecuteRunAction
         $tests = $this->maestro->withSmokeFirst($this->run->getTests() ?? []);
         $appId = $lane->appId($repoDir, $tests);
 
+        // Whatever the team typed for this repository on the run sheet, so the lane
+        // gets the real PIN or setup values instead of guessing them from the flows.
+        $givenData = (string) (ProjectSetting::query()
+            ->where(ProjectSetting::PROJECT_ID, $this->run->getProjectId())
+            ->first()
+            ?->getAiContext() ?? '');
+
         // The lane can run for many minutes on the device, so the live view records
         // the whole time — otherwise a run whose only kind is ai has no frames at all.
         $live = $this->live->start($this->run, $workspace);
@@ -969,7 +976,7 @@ class ExecuteRunAction
         try {
             $result = $lane->run(
                 (string) $this->run->getId(),
-                $lane->mission($repoDir, $tests, $appId),
+                $lane->mission($repoDir, $tests, $appId, $givenData),
                 $connection,
                 $this->device(),
                 $appId,

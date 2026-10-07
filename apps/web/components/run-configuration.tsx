@@ -127,6 +127,7 @@ export function RunConfiguration({
   const [platform, setPlatform] = useState<Platform>("android");
   const [live, setLive] = useState(true);
   const [dartDefines, setDartDefines] = useState("");
+  const [aiContext, setAiContext] = useState("");
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
@@ -147,6 +148,7 @@ export function RunConfiguration({
                 orientation?: Orientation;
                 platform?: Platform;
                 dartDefines?: string;
+                aiContext?: string;
                 orientationSet?: boolean;
                 platformSet?: boolean;
               }
@@ -160,6 +162,7 @@ export function RunConfiguration({
           if (data.platformSet && data.platform) setPlatform(data.platform);
           else setPlatform("android");
           if (typeof data.dartDefines === "string") setDartDefines(data.dartDefines);
+          if (typeof data.aiContext === "string") setAiContext(data.aiContext);
         },
       )
       .catch(() => undefined);
@@ -170,8 +173,12 @@ export function RunConfiguration({
   }, [projectId]);
 
   /** Remember a choice for the next run; a failure here must not block the form. */
-  function remember(values: { orientation?: Orientation; platform?: Platform }) {
-    void fetch(`/api/projects/${projectId}/settings`, {
+  function remember(values: {
+    orientation?: Orientation;
+    platform?: Platform;
+    aiContext?: string;
+  }): Promise<unknown> {
+    return fetch(`/api/projects/${projectId}/settings`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(values),
@@ -222,6 +229,11 @@ export function RunConfiguration({
     setStartError(null);
 
     try {
+      // Persist the AI data first, so the run reads exactly what is on screen here.
+      if (runKinds.has("ai")) {
+        await remember({ aiContext });
+      }
+
       const response = await fetch("/api/runs", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -474,6 +486,25 @@ export function RunConfiguration({
 //                 </label>
 */}
               </div>
+
+              {runKinds.has("ai") && (
+                <label className="field">
+                  <span className="field-label">AI test data</span>
+                  <textarea
+                    value={aiContext}
+                    onChange={(event) => setAiContext(event.target.value)}
+                    onBlur={() => void remember({ aiContext })}
+                    rows={4}
+                    spellCheck={false}
+                    placeholder={"PIN: 1234\ncompany name: Acme\nserial: 0000"}
+                  />
+                  <span className="hint">
+                    Anything the AI lane has to type to get into the app — a PIN, a login, a
+                    setup value. Each app needs its own; it is remembered for this repository
+                    and handed to the lane before it starts.
+                  </span>
+                </label>
+              )}
 
               <details className="disclosure">
                 <summary>Advanced · extra build defines</summary>
