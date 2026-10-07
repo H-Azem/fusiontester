@@ -63,6 +63,9 @@ cd /home/tester/lane
 # the device and the model endpoint reachable. AGENTS.md still keeps the agent to
 # plain literal adb commands, and settings.json keeps its allowlist for the day the
 # entrypoint path honours it.
+# compact-mode=fast compacts the transcript sooner, so each turn re-sends less of it
+# — the history is what makes input tokens grow turn after turn. taste-learning is
+# off because the lane has no use for it and it would only add model calls.
 exec cmd -p "$MISSION" \
   -m "fusion/${FUSION_AI_MODEL}" \
   --output-format json \
@@ -70,6 +73,8 @@ exec cmd -p "$MISSION" \
   --yolo \
   --local-only \
   --no-session \
+  --config compact-mode=fast \
+  --config taste-learning=false \
   --skip-onboarding \
   --trust \
   > /work/agent.ndjson 2> /work/agent.err
