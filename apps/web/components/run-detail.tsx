@@ -327,7 +327,7 @@ export function RunDetail({ id }: { id: string }) {
           <div className="row" style={{ marginTop: 12 }}>
             <button
               type="button"
-              className="md-button tonal"
+              className="md-button danger"
               onClick={() => void cancelRun()}
               disabled={cancelling}
             >
