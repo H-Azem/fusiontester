@@ -242,9 +242,14 @@ export function RunDetail({ id }: { id: string }) {
   const verdict = VERDICT[run.status] ?? { title: run.status, sub: "" };
   const bird: BirdState = BIRD_FOR_STATUS[run.status] ?? "unknown";
   const duration = shortDuration(run.startedAt, run.finishedAt);
-  // A stage that was not selected is skipped, not run — showing it only invites the
-  // question of why it is there.
-  const visibleSteps = run.steps.filter((step) => step.status !== "skipped");
+  // A stage nobody selected is not part of this run — and until the pipeline reaches
+  // it, it is still only "pending", so what was selected decides, not the status.
+  const visibleSteps = run.steps.filter((step) => {
+    if (step.status === "skipped") return false;
+    if (step.key === "maestro" || step.key === "ai") return run.runKinds.includes(step.key);
+
+    return true;
+  });
 
   return (
     <>
