@@ -31,6 +31,55 @@ function testLabel(name: string): string {
 
 const RUN_KIND_LABELS: Record<string, string> = { ai: "AI", maestro: "Maestro", manual: "Manual APK" };
 
+type StepResult = { passed: boolean; name: string; meta?: string };
+
+/** `[Passed] full_test (1m 51s)` — Maestro names each flow it ran. */
+function parseFlowResults(output: string): StepResult[] {
+  const results: StepResult[] = [];
+
+  for (const match of output.matchAll(/^\[(Passed|Failed|Skipped)\]\s+(.+?)(?:\s+\(([^)]*)\))?\s*$/gm)) {
+    results.push({ passed: match[1] === "Passed", name: match[2].trim(), meta: match[3]?.trim() });
+  }
+
+  return results;
+}
+
+/** `✓ open customers — the list is on screen` — the lane's own verdict per goal. */
+function parseGoalResults(output: string): StepResult[] {
+  const results: StepResult[] = [];
+
+  for (const match of output.matchAll(/^([✓✗])\s+(.+?)(?:\s+—\s+(.*))?\s*$/gm)) {
+    results.push({ passed: match[1] === "✓", name: match[2].trim(), meta: match[3]?.trim() });
+  }
+
+  return results;
+}
+
+/**
+ * The steps that run tests have their own shape — flows and goals, each with a
+ * verdict — so the raw text is turned into the list a person actually reads.
+ */
+function StepResults({ step }: { step: { key: string; output: string | null } }) {
+  const output = step.output ?? "";
+  const results = step.key === "maestro" ? parseFlowResults(output) : step.key === "ai" ? parseGoalResults(output) : [];
+
+  if (results.length === 0) return null;
+
+  return (
+    <ul className="stack" style={{ listStyle: "none", padding: 0, margin: "10px 0 0", gap: 6 }}>
+      {results.map((result, index) => (
+        <li key={index} className="row" style={{ alignItems: "flex-start", gap: 10 }}>
+          <StatusChip status={result.passed ? "passed" : "failed"} label={result.passed ? "pass" : "fail"} />
+          <span className="stack" style={{ gap: 2, flex: 1 }}>
+            <span className="md-title-sm">{result.name}</span>
+            {result.meta && <span className="md-body-sm muted">{result.meta}</span>}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /**
  * The device screen while a run is in flight. The frame is overwritten in place on
  * the server, so the query string is what makes the browser ask for the new one.
@@ -378,6 +427,8 @@ export function RunDetail({ id }: { id: string }) {
                         : ""}
                   </span>
                 </div>
+
+                <StepResults step={step} />
 
                 {step.output && step.output.trim() !== "" && (
                   <details className="disclosure">
