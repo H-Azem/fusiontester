@@ -98,7 +98,7 @@ export default function LoginPage() {
       <div className="login-card">
         <div className="login-brand">
           <Bird state="success" size={96} float />
-          <h1>Fusion Tester</h1>
+          <h1>Fusion Apps Lab</h1>
           <p>Sign in to run Maestro and AI tests against your Flutter apps</p>
         </div>
 

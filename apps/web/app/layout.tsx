@@ -25,9 +25,9 @@ const mono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Fusion Tester",
+  title: "Fusion Apps Lab",
   description: "Maestro flow orchestration for Flutter apps",
-  applicationName: "Fusion Tester",
+  applicationName: "Fusion Apps Lab",
 };
 
 /** Paints the notch area so the mobile navigation bar can sit in the safe zone. */
