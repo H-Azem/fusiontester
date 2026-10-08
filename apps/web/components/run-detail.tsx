@@ -17,6 +17,20 @@ const VERDICT: Record<string, { title: string; sub: string }> = {
   queued: { title: "Queued", sub: "A worker will pick this up shortly." },
 };
 
+/** `orders/mark_ready_complete` -> `Orders · Mark ready complete`. */
+function testLabel(name: string): string {
+  return name
+    .split("/")
+    .filter(Boolean)
+    .map((part) => {
+      const spaced = part.replace(/_/g, " ");
+      return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+    })
+    .join(" · ");
+}
+
+const RUN_KIND_LABELS: Record<string, string> = { ai: "AI", maestro: "Maestro" };
+
 /**
  * The device screen while a run is in flight. The frame is overwritten in place on
  * the server, so the query string is what makes the browser ask for the new one.
@@ -197,7 +211,19 @@ function AiReportPanel({ runId }: { runId: string }) {
 }
 
 export function RunDetail({ id }: { id: string }) {
-  const { run, error, loaded } = useRun(id);
+  const { run, error, loaded, reload } = useRun(id);
+  const [cancelling, setCancelling] = useState(false);
+
+  async function cancelRun() {
+    setCancelling(true);
+
+    try {
+      await fetch(`/api/runs/${id}/cancel`, { method: "POST" });
+      reload();
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   if (error) {
     return (
@@ -261,11 +287,11 @@ export function RunDetail({ id }: { id: string }) {
         <dl className="meta-grid">
           <div>
             <dt>Tests</dt>
-            <dd>{run.tests.length > 0 ? run.tests.join(", ") : "all flows"}</dd>
+            <dd>{run.tests.length > 0 ? run.tests.map(testLabel).join(", ") : "all flows"}</dd>
           </div>
           <div>
             <dt>Run with</dt>
-            <dd>{run.runKinds.join(" + ") || "—"}</dd>
+            <dd>{run.runKinds.map((kind) => RUN_KIND_LABELS[kind] ?? kind).join(" + ") || "—"}</dd>
           </div>
           <div>
             <dt>Environment</dt>
@@ -289,6 +315,19 @@ export function RunDetail({ id }: { id: string }) {
           <pre className="output error" role="alert">
             {run.errorMessage}
           </pre>
+        )}
+
+        {(run.status === "running" || run.status === "queued") && (
+          <div className="row" style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="md-button tonal"
+              onClick={() => void cancelRun()}
+              disabled={cancelling}
+            >
+              {cancelling ? "Stopping…" : "Stop this run"}
+            </button>
+          </div>
         )}
       </section>
 

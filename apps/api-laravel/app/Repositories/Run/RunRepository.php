@@ -67,6 +67,24 @@ class RunRepository
     }
 
     /**
+     * Stops a run that has not finished. The pipeline checks the run's status at
+     * every stage boundary, and the AI lane watches for the marker this leaves so a
+     * lane already driving the device is cut short too.
+     */
+    public function cancel(Run $run): bool
+    {
+        $run->refresh();
+
+        if (! in_array($run->getStatus(), [Run::STATUS_QUEUED, Run::STATUS_RUNNING], true)) {
+            return false;
+        }
+
+        $this->failRun($run, (string) $run->getCurrentStep(), 'Cancelled by hand.');
+
+        return true;
+    }
+
+    /**
      * Claims the oldest queued run. The conditional update makes the claim
      * atomic, so a run can never be picked up twice.
      */

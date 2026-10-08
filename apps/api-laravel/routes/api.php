@@ -73,6 +73,7 @@ Route::middleware('auth.session')->group(function () {
     Route::get('runs', [RunController::class, 'index']);
     Route::post('runs', [RunController::class, 'store']);
     Route::get('runs/{id}', [RunController::class, 'show']);
+    Route::post('runs/{id}/cancel', [RunController::class, 'cancel']);
     Route::get('runs/{id}/screenshot', [RunController::class, 'screenshot']);
     Route::get('runs/{id}/live', [RunController::class, 'live']);
     Route::get('runs/{id}/maestro-screenshot', [RunController::class, 'maestroScreenshot']);

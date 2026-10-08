@@ -28,6 +28,33 @@ log() { printf '%s %s\n' "$(date -Is)" "$*" >>"$LOG"; }
 
 mkdir -p "$REQUESTS"
 
+# Runs the container, and stops it early if the API drops a `cancel` marker into the
+# request — the only way to interrupt a lane that is already driving the device.
+run_lane() {
+  timeout "$RUN_TIMEOUT" docker run --rm \
+    --name "ai-tester-$run" \
+    --network "$NETWORK" \
+    --cap-drop ALL \
+    --security-opt no-new-privileges \
+    --env-file "$request/env" \
+    "$@" >>"$request/runner.log" 2>&1 &
+
+  lane_pid=$!
+
+  while kill -0 "$lane_pid" 2>/dev/null; do
+    if [ -f "$request/cancel" ]; then
+      docker kill "ai-tester-$run" >/dev/null 2>&1
+      log "$run: cancelled on request"
+      break
+    fi
+
+    sleep 2
+  done
+
+  wait "$lane_pid"
+  return $?
+}
+
 while true; do
   for request in "$REQUESTS"/*; do
     [ -d "$request" ] || continue
@@ -61,12 +88,7 @@ while true; do
     fi
 
     if [ -n "$auth_mount" ]; then
-      timeout "$RUN_TIMEOUT" docker run --rm \
-        --name "ai-tester-$run" \
-        --network "$NETWORK" \
-        --cap-drop ALL \
-        --security-opt no-new-privileges \
-        --env-file "$request/env" \
+      run_lane \
         -v "$auth_mount" \
         -v "$work":/work \
         --entrypoint sh \
@@ -77,16 +99,9 @@ while true; do
             chmod 600 "$HOME/.commandcode/auth.json"
           fi
           exec sh /usr/local/bin/ai-tester-entrypoint.sh
-        ' >>"$request/runner.log" 2>&1
+        '
     else
-      timeout "$RUN_TIMEOUT" docker run --rm \
-        --name "ai-tester-$run" \
-        --network "$NETWORK" \
-        --cap-drop ALL \
-        --security-opt no-new-privileges \
-        --env-file "$request/env" \
-        -v "$work":/work \
-        "$IMAGE" >>"$request/runner.log" 2>&1
+      run_lane -v "$work":/work "$IMAGE"
     fi
 
     code=$?

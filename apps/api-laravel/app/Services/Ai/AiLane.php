@@ -161,13 +161,26 @@ class AiLane
         $this->remove($root);
     }
 
+    /**
+     * Asks the host runner to stop a lane that is already driving the device: the
+     * runner kills the container, and wait() stops waiting when it sees the marker.
+     */
+    public function requestCancel(string $runId): void
+    {
+        $root = $this->root($runId);
+
+        if (is_dir($root)) {
+            @file_put_contents($root.'/cancel', (string) time());
+        }
+    }
+
     private function wait(string $root): void
     {
         $timeout = $this->timeoutSeconds > 0 ? $this->timeoutSeconds : (int) config('fusion.ai.timeout_seconds');
         $poll = $this->pollMilliseconds > 0 ? $this->pollMilliseconds : (int) config('fusion.ai.poll_ms');
         $deadline = time() + $timeout;
 
-        while (! is_file($root.'/done') && time() < $deadline) {
+        while (! is_file($root.'/done') && ! is_file($root.'/cancel') && time() < $deadline) {
             usleep(max(100, $poll) * 1000);
         }
     }

@@ -8,6 +8,7 @@ use App\Models\Run;
 use App\Repositories\Run\RunRepository;
 use App\Http\Resources\RunArtifacts;
 use App\Http\Resources\RunResource;
+use App\Services\Ai\AiLane;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Response as ResponseFactory;
@@ -118,6 +119,28 @@ class RunController extends Controller
         }
 
         return ResponseFactory::file($path, ['Content-Type' => 'text/plain; charset=UTF-8']);
+    }
+
+    /** Stops a run that is queued or in flight, so a mistaken start can be undone. */
+    public function cancel(string $id): JsonResponse
+    {
+        $run = $this->runs->find($id);
+
+        if ($run === null) {
+            return $this->legacyResponse(['error' => 'not_found'], Response::HTTP_NOT_FOUND);
+        }
+
+        if (! $this->runs->cancel($run)) {
+            return $this->legacyResponse(
+                ['error' => 'not_running', 'message' => 'That run has already finished.'],
+                Response::HTTP_CONFLICT
+            );
+        }
+
+        // If the AI lane is the stage running, this is what stops it on the device.
+        (new AiLane)->requestCancel($id);
+
+        return $this->legacyResponse((new RunResource($run->refresh()))->resolve());
     }
 
     /** The lane's own stream: models, tools, usage and any permission refusal. */
