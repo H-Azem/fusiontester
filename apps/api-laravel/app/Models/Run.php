@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Model;
     self::LIVE,
     self::DART_DEFINES,
     self::APK_TOKEN,
+    self::APK_DOWNLOADED_AT,
     self::ERROR_MESSAGE,
     self::CREATED_AT,
     self::STARTED_AT,
@@ -96,6 +97,9 @@ class Run extends Model implements BaseModelInterface
      */
     const APK_TOKEN = 'apk_token';
 
+    /** Set the moment the APK is taken, so the page can say the link is spent. */
+    const APK_DOWNLOADED_AT = 'apk_downloaded_at';
+
     const ENVIRONMENT_DEVELOPMENT = 'development';
 
     const ENVIRONMENT_PRODUCTION = 'production';
@@ -111,6 +115,7 @@ class Run extends Model implements BaseModelInterface
             self::RUN_KINDS => 'array',
             self::ENVIRONMENTS => 'array',
             self::LIVE => 'boolean',
+            self::APK_DOWNLOADED_AT => 'datetime',
             self::CREATED_AT => 'datetime',
             self::STARTED_AT => 'datetime',
             self::FINISHED_AT => 'datetime',

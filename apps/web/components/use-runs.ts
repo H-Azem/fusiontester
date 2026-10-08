@@ -34,6 +34,7 @@ export type RunSummary = {
   hasAiScreenshot: boolean;
   hasAiReport: boolean;
   hasApk: boolean;
+  apkDownloaded: boolean;
   hasLiveFrame: boolean;
   steps: RunStep[];
 };

@@ -328,6 +328,12 @@ export function RunDetail({ id }: { id: string }) {
           </div>
         )}
 
+        {!run.hasApk && run.apkDownloaded && (
+          <p className="md-body-sm muted" style={{ marginTop: 12 }}>
+            The APK for this run was already downloaded; the one-time link is spent.
+          </p>
+        )}
+
         {(run.status === "running" || run.status === "queued") && (
           <div className="row" style={{ marginTop: 12 }}>
             <button

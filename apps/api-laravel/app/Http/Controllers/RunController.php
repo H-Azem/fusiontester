@@ -163,6 +163,7 @@ class RunController extends Controller
         }
 
         $run->setAttribute(Run::APK_TOKEN, null);
+        $run->setAttribute(Run::APK_DOWNLOADED_AT, now());
         $run->save();
 
         return ResponseFactory::download($path, 'app.apk')->deleteFileAfterSend(true);
