@@ -68,8 +68,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <Link href="/" className="brand">
           <Bird state="success" size={32} />
           <span className="brand-text">
-            <span className="brand-name">FUSION APPS LAB</span>
-            <span className="brand-sub">FLUTTER APP TESTING</span>
+            <span className="brand-name">Fusion Tester</span>
+            <span className="brand-sub">FUSION APPS LAB</span>
           </span>
         </Link>
 

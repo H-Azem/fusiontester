@@ -65,15 +65,6 @@ function LiveView({ runId, running, hasFrame }: { runId: string; running: boolea
               streaming
             </span>
           )}
-          <a
-            className="md-button text small"
-            href={`/api/runs/${runId}/live?t=${tick}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <Icon name="external" size={16} />
-            Full size
-          </a>
         </span>
       </div>
 
