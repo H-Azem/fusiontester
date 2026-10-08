@@ -37,8 +37,8 @@ class RunController extends Controller
             'branch' => ['required', 'string', 'max:300'],
             'tests' => ['sometimes', 'array', 'max:200'],
             'tests.*' => ['string', 'max:300'],
-            'runKinds' => ['required', 'array', 'min:1', 'max:2'],
-            'runKinds.*' => ['in:maestro,ai'],
+            'runKinds' => ['required', 'array', 'min:1', 'max:3'],
+            'runKinds.*' => ['in:maestro,ai,manual'],
             'environments' => ['required', 'array', 'min:1', 'max:2'],
             'environments.*' => ['in:development,production'],
             'orientation' => ['sometimes', 'in:horizontal,vertical'],
@@ -141,6 +141,31 @@ class RunController extends Controller
         (new AiLane)->requestCancel($id);
 
         return $this->legacyResponse((new RunResource($run->refresh()))->resolve());
+    }
+
+    /**
+     * The built APK, handed over exactly once. Serving it clears the run's token, so
+     * a second attempt finds nothing even if the download was interrupted.
+     */
+    public function apk(string $id)
+    {
+        $run = $this->runs->find($id);
+        $token = (string) ($run?->getApkToken() ?? '');
+
+        if ($run === null || $token === '') {
+            return $this->legacyResponse(['error' => 'not_found'], Response::HTTP_NOT_FOUND);
+        }
+
+        $path = RunArtifacts::apkPath($token);
+
+        if (! is_file($path)) {
+            return $this->legacyResponse(['error' => 'gone'], Response::HTTP_GONE);
+        }
+
+        $run->setAttribute(Run::APK_TOKEN, null);
+        $run->save();
+
+        return ResponseFactory::download($path, 'app.apk')->deleteFileAfterSend(true);
     }
 
     /** The lane's own stream: models, tools, usage and any permission refusal. */

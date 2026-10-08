@@ -35,6 +35,15 @@ class RunArtifacts
         return self::path($runId, self::LIVE_FRAME);
     }
 
+    /**
+     * The one-time APK hand-off. It lives outside the run workspace, which is deleted
+     * when the run ends, so the file survives long enough to be downloaded.
+     */
+    public static function apkPath(string $token): string
+    {
+        return storage_path('app/fusion/apk/'.$token.'.apk');
+    }
+
     public static function path(string $runId, string $file): string
     {
         return self::workspace($runId).'/'.$file;

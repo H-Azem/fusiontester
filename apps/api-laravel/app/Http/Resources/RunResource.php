@@ -38,6 +38,7 @@ class RunResource extends JsonResource
             'hasMaestroScreenshot' => RunArtifacts::hasScreenshot((string) $this->getId(), 'maestro-failure.png'),
             'hasAiScreenshot' => RunArtifacts::hasScreenshot((string) $this->getId(), 'ai-failure.png'),
             'hasAiReport' => RunArtifacts::hasAiReport((string) $this->getId()),
+            'hasApk' => (string) ($this->getApkToken() ?? '') !== '',
             'hasLiveFrame' => is_file(RunArtifacts::liveFrame((string) $this->getId())),
             'steps' => RunStepResource::collection($this->whenLoaded('steps'))->resolve(),
         ];

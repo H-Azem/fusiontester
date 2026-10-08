@@ -124,6 +124,16 @@ class ExecuteRunAction
 
             $kinds = $this->run->getRunKinds() ?? [];
 
+            // A manual run is about the artifact, not a test: keep the built APK
+            // where it can be downloaded once before the workspace is thrown away.
+            if ($android && in_array(Run::KIND_MANUAL, $kinds, true)) {
+                $apk = $this->latestApk($repoDir);
+
+                if ($apk !== null) {
+                    $this->runs->publishApk($this->run, $apk);
+                }
+            }
+
             if (! in_array(Run::KIND_MAESTRO, $kinds, true)) {
                 $this->runs->skipStage($this->run, 'maestro', 'Skipped — Maestro was not selected.');
             } elseif ($android) {

@@ -76,6 +76,7 @@ Route::middleware('auth.session')->group(function () {
     Route::post('runs/{id}/cancel', [RunController::class, 'cancel']);
     Route::get('runs/{id}/screenshot', [RunController::class, 'screenshot']);
     Route::get('runs/{id}/live', [RunController::class, 'live']);
+    Route::get('runs/{id}/apk', [RunController::class, 'apk']);
     Route::get('runs/{id}/maestro-screenshot', [RunController::class, 'maestroScreenshot']);
     Route::get('runs/{id}/ai-screenshot', [RunController::class, 'aiScreenshot']);
     Route::get('runs/{id}/ai-report', [RunController::class, 'aiReport']);

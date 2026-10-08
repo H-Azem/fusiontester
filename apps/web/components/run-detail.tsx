@@ -29,7 +29,7 @@ function testLabel(name: string): string {
     .join(" · ");
 }
 
-const RUN_KIND_LABELS: Record<string, string> = { ai: "AI", maestro: "Maestro" };
+const RUN_KIND_LABELS: Record<string, string> = { ai: "AI", maestro: "Maestro", manual: "Manual APK" };
 
 /**
  * The device screen while a run is in flight. The frame is overwritten in place on
@@ -242,6 +242,9 @@ export function RunDetail({ id }: { id: string }) {
   const verdict = VERDICT[run.status] ?? { title: run.status, sub: "" };
   const bird: BirdState = BIRD_FOR_STATUS[run.status] ?? "unknown";
   const duration = shortDuration(run.startedAt, run.finishedAt);
+  // A stage that was not selected is skipped, not run — showing it only invites the
+  // question of why it is there.
+  const visibleSteps = run.steps.filter((step) => step.status !== "skipped");
 
   return (
     <>
@@ -308,6 +311,18 @@ export function RunDetail({ id }: { id: string }) {
           </pre>
         )}
 
+        {run.hasApk && (
+          <div className="row" style={{ marginTop: 12, alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <a className="md-button filled" href={`/api/runs/${run.id}/apk`}>
+              <Icon name="external" size={18} />
+              Download the APK
+            </a>
+            <span className="md-body-sm muted">
+              one-time link — it works once and then the file is gone
+            </span>
+          </div>
+        )}
+
         {(run.status === "running" || run.status === "queued") && (
           <div className="row" style={{ marginTop: 12 }}>
             <button
@@ -330,12 +345,12 @@ export function RunDetail({ id }: { id: string }) {
         <div className="panel-head">
           <h2>Steps</h2>
           <span className="panel-sub">
-            {run.steps.filter((step) => step.status === "done").length} of {run.steps.length} done
+            {visibleSteps.filter((step) => step.status === "done").length} of {visibleSteps.length} done
           </span>
         </div>
 
         <ol className="stepper">
-          {run.steps.map((step) => (
+          {visibleSteps.map((step) => (
             <li key={step.key} className={`step ${statusTone(step.status)}`}>
               <div className="step-rail">
                 <span className="step-marker">{stepGlyph(step.status)}</span>

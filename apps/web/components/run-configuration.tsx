@@ -13,13 +13,14 @@ type MaestroTest = {
   exclusive: boolean;
 };
 
-type RunKind = "maestro" | "ai";
+type RunKind = "maestro" | "ai" | "manual";
 type Orientation = "horizontal" | "vertical";
 type Platform = "web" | "android";
 
 const RUN_KINDS: Array<{ id: RunKind; label: string; hint: string }> = [
   { id: "maestro", label: "Maestro flows", hint: "drives the recorded journeys" },
   { id: "ai", label: "AI test", hint: "model picks the actions (web lane only)" },
+  { id: "manual", label: "Manual APK", hint: "just build it, and hand you a one-time download" },
 ];
 
 const PLATFORMS: Array<{ id: Platform; label: string; hint: string }> = [

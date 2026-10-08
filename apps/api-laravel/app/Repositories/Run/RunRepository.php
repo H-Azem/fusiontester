@@ -2,6 +2,7 @@
 
 namespace App\Repositories\Run;
 
+use App\Http\Resources\RunArtifacts;
 use App\Models\Run;
 use App\Models\RunStep;
 
@@ -80,6 +81,31 @@ class RunRepository
         }
 
         $this->failRun($run, (string) $run->getCurrentStep(), 'Cancelled by hand.');
+
+        return true;
+    }
+
+    /**
+     * Copies a built APK out of the disposable workspace so it can be downloaded
+     * once, and remembers the token that hands it over. The workspace is removed
+     * when the run ends, which is why the copy happens at all.
+     */
+    public function publishApk(Run $run, string $apkPath): bool
+    {
+        if (! is_file($apkPath)) {
+            return false;
+        }
+
+        $token = bin2hex(random_bytes(20));
+        $target = RunArtifacts::apkPath($token);
+        @mkdir(dirname($target), 0775, true);
+
+        if (! @copy($apkPath, $target)) {
+            return false;
+        }
+
+        $run->setAttribute(Run::APK_TOKEN, $token);
+        $run->save();
 
         return true;
     }

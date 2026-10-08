@@ -21,6 +21,7 @@ use Illuminate\Database\Eloquent\Model;
     self::PLATFORM,
     self::LIVE,
     self::DART_DEFINES,
+    self::APK_TOKEN,
     self::ERROR_MESSAGE,
     self::CREATED_AT,
     self::STARTED_AT,
@@ -85,6 +86,15 @@ class Run extends Model implements BaseModelInterface
     const KIND_MAESTRO = 'maestro';
 
     const KIND_AI = 'ai';
+
+    /** Build the APK and hand it over; run no tests and drive no device. */
+    const KIND_MANUAL = 'manual';
+
+    /**
+     * Where a run's one-time APK hand-off lives. Cleared the moment the file is
+     * downloaded, which is what makes the link single-use.
+     */
+    const APK_TOKEN = 'apk_token';
 
     const ENVIRONMENT_DEVELOPMENT = 'development';
 

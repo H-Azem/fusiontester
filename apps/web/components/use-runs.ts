@@ -33,6 +33,7 @@ export type RunSummary = {
   hasMaestroScreenshot: boolean;
   hasAiScreenshot: boolean;
   hasAiReport: boolean;
+  hasApk: boolean;
   hasLiveFrame: boolean;
   steps: RunStep[];
 };
