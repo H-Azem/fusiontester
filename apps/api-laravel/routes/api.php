@@ -8,6 +8,7 @@ use App\Http\Controllers\HealthController;
 use App\Http\Controllers\Hooks\GitlabWebhookController;
 use App\Http\Controllers\PinController;
 use App\Http\Controllers\ProjectSettingsController;
+use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\RunController;
 use App\Http\Controllers\Settings\AiSettingsController;
 use App\Http\Controllers\Settings\AutomationTriggerController;
@@ -69,6 +70,12 @@ Route::middleware('auth.session')->group(function () {
         ->whereNumber('projectId');
     Route::put('projects/{projectId}/settings', [ProjectSettingsController::class, 'update'])
         ->whereNumber('projectId');
+
+    Route::get('device/frame', [DeviceController::class, 'frame']);
+    Route::post('device/tap', [DeviceController::class, 'tap']);
+    Route::post('device/swipe', [DeviceController::class, 'swipe']);
+    Route::post('device/text', [DeviceController::class, 'text']);
+    Route::post('device/key', [DeviceController::class, 'key']);
 
     Route::get('runs', [RunController::class, 'index']);
     Route::post('runs', [RunController::class, 'store']);
