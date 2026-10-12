@@ -29,16 +29,17 @@ export default function DevicePage() {
           </p>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          {started && (
-            <button type="button" className="md-button tonal small" onClick={start}>
-              <Icon name="refresh" size={16} />
-              Restart
+          {started ? (
+            <button type="button" className="md-button tonal" onClick={start}>
+              <Icon name="refresh" size={18} />
+              Restart emulator
+            </button>
+          ) : (
+            <button type="button" className="md-button filled" onClick={start}>
+              <Icon name="device" size={18} />
+              Start emulator
             </button>
           )}
-          <button type="button" className="md-button filled" onClick={start}>
-            <Icon name="device" size={18} />
-            Start emulator
-          </button>
         </div>
       </div>
 
