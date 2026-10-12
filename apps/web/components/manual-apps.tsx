@@ -3,12 +3,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Icon } from "@/components/icons";
-import { StatusChip } from "@/components/status";
+import { StatusChip, relativeTime } from "@/components/status";
 
 type Project = { id: number; name: string; pathWithNamespace: string; defaultBranch: string };
 type Branch = { name: string; default: boolean };
 type BranchCheck = { ref: string; isFlutterApp: boolean; isFlutterAppReason: string };
-type ManualApp = { id: number; projectId: number; projectPath: string; branch: string; title: string };
+type ManualApp = {
+  id: number;
+  projectId: number;
+  projectPath: string;
+  branch: string;
+  title: string;
+  apkBuiltAt?: string | null;
+  buildError?: string | null;
+};
 
 /**
  * Apps built for testing by hand. This step is the register: what to call the app,
@@ -26,6 +34,7 @@ export function ManualApps() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [buildingId, setBuildingId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/settings/manual-apps", { cache: "no-store" });
@@ -114,6 +123,18 @@ export function ManualApps() {
       await load();
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function buildNow(app: ManualApp) {
+    setBuildingId(app.id);
+
+    try {
+      await fetch(`/api/settings/manual-apps/${app.id}/build`, { method: "POST" });
+      setNotice(`Building ${app.title}… its build time will update when it lands.`);
+      await load();
+    } finally {
+      setBuildingId(null);
     }
   }
 
@@ -246,13 +267,29 @@ export function ManualApps() {
                     {app.projectPath} · <span className="mono">{app.branch}</span>
                   </p>
                 </div>
-                <StatusChip status="queued" label="no build yet" />
+                <StatusChip
+                  status={app.buildError ? "failed" : app.apkBuiltAt ? "passed" : "queued"}
+                  label={app.buildError ? "build failed" : app.apkBuiltAt ? "built" : "no build yet"}
+                />
               </div>
+              <p className="md-body-sm muted">
+                {app.apkBuiltAt ? `Built ${relativeTime(app.apkBuiltAt)}` : "Not built yet."}
+              </p>
               <div className="row">
+                <button
+                  type="button"
+                  className="md-button tonal"
+                  onClick={() => void buildNow(app)}
+                  disabled={buildingId === app.id}
+                >
+                  {buildingId === app.id ? <span className="spinner" /> : <Icon name="bolt" size={18} />}
+                  {buildingId === app.id ? "Building…" : "Build now"}
+                </button>
                 <button type="button" className="md-button text" onClick={() => void remove(app)}>
                   Delete
                 </button>
               </div>
+              {app.buildError && <pre className="output error">{app.buildError}</pre>}
             </article>
           ))
         )}

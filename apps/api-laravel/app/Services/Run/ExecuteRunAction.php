@@ -201,7 +201,7 @@ class ExecuteRunAction
         }
 
         $result = $this->process(
-            ['git', 'clone', '--depth', '1', '--single-branch', '--branch', (string) $this->run->getBranch(), $this->cloneUrl($connection), $repoDir],
+            ['git', 'clone', '--depth', '1', '--single-branch', '--branch', (string) $this->run->getBranch(), GitlabClient::cloneUrl($connection, (string) $this->run->getProjectPath()), $repoDir],
             dirname($repoDir),
             self::COMMAND_TIMEOUT_SECONDS
         );
@@ -1132,22 +1132,6 @@ class ExecuteRunAction
         }
 
         return $defines;
-    }
-
-    private function cloneUrl(\App\Services\Gitlab\GitlabConnectionData $connection): string
-    {
-        $parsed = parse_url($connection->baseUrl);
-        $basePath = rtrim($parsed['path'] ?? '', '/');
-        $path = ltrim(preg_replace('/\.git$/', '', $this->run->getProjectPath()) ?? '', '/');
-
-        return sprintf(
-            '%s://oauth2:%s@%s%s/%s.git',
-            $parsed['scheme'] ?? 'https',
-            rawurlencode($connection->token),
-            $parsed['host'] ?? '',
-            $basePath,
-            $path
-        );
     }
 
     private function findBrowser(): ?string

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\BuildManualAppJob;
 use App\Models\ManualApp;
 use App\Repositories\Manual\ManualAppRepository;
 use Illuminate\Http\JsonResponse;
@@ -43,6 +44,20 @@ class ManualAppController extends Controller
         return $this->legacyResponse(['app' => $this->present($app)], Response::HTTP_CREATED);
     }
 
+    /** Builds the app now, off the queue, exactly as the hourly check will. */
+    public function build(int $id): JsonResponse
+    {
+        $app = $this->apps->find($id);
+
+        if ($app === null) {
+            return $this->legacyResponse(['error' => 'not_found'], Response::HTTP_NOT_FOUND);
+        }
+
+        BuildManualAppJob::dispatch($id);
+
+        return $this->legacyResponse(['ok' => true]);
+    }
+
     public function destroy(int $id): JsonResponse
     {
         $app = $this->apps->find($id);
@@ -65,6 +80,8 @@ class ManualAppController extends Controller
             'projectPath' => $app->getProjectPath(),
             'branch' => $app->getBranch(),
             'title' => $app->getTitle(),
+            'apkBuiltAt' => $app->getApkBuiltAt()?->toIso8601String(),
+            'buildError' => $app->getBuildError(),
         ];
     }
 }

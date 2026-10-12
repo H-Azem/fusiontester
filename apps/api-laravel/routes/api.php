@@ -47,6 +47,7 @@ Route::middleware('auth.session')->group(function () {
 
         Route::get('settings/manual-apps', [ManualAppController::class, 'index']);
         Route::post('settings/manual-apps', [ManualAppController::class, 'store']);
+        Route::post('settings/manual-apps/{id}/build', [ManualAppController::class, 'build'])->whereNumber('id');
         Route::delete('settings/manual-apps/{id}', [ManualAppController::class, 'destroy'])->whereNumber('id');
 
         Route::get('automation/triggers', [AutomationTriggerController::class, 'index']);

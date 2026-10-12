@@ -54,6 +54,26 @@ class GitlabClient
         return $token === '' ? $text : str_replace($token, '[redacted]', $text);
     }
 
+    /**
+     * The URL a clone uses: the token rides in it, so git needs no credential helper
+     * and nothing is written to the host's home.
+     */
+    public static function cloneUrl(GitlabConnectionData $connection, string $projectPath): string
+    {
+        $parsed = parse_url($connection->baseUrl);
+        $basePath = rtrim($parsed['path'] ?? '', '/');
+        $path = ltrim((string) preg_replace('/\.git$/', '', $projectPath), '/');
+
+        return sprintf(
+            '%s://oauth2:%s@%s%s/%s.git',
+            $parsed['scheme'] ?? 'https',
+            rawurlencode($connection->token),
+            $parsed['host'] ?? '',
+            $basePath,
+            $path
+        );
+    }
+
     public function listProjects(GitlabConnectionData $connection, ?string $search = null): array
     {
         $projects = [];
