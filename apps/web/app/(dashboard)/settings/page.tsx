@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AiSettings } from "@/components/ai-settings";
 import { AccountSection } from "@/components/account-section";
+import { ManualApps } from "@/components/manual-apps";
 import { SettingsGate, SettingsPasswordCard } from "@/components/settings-gate";
 import { TelegramSettings } from "@/components/telegram-settings";
 import { Icon } from "@/components/icons";
@@ -302,6 +303,7 @@ export default function SettingsPage() {
       <div className="stack">
         <GitlabSettings />
         <AiSettings />
+        <ManualApps />
         <TelegramSettings />
         <SettingsPasswordCard />
         <AccountSection />

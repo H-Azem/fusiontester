@@ -13,6 +13,7 @@ use App\Http\Controllers\RunController;
 use App\Http\Controllers\Settings\AiSettingsController;
 use App\Http\Controllers\Settings\AutomationTriggerController;
 use App\Http\Controllers\Settings\GitlabSettingsController;
+use App\Http\Controllers\Settings\ManualAppController;
 use App\Http\Controllers\Settings\TelegramSettingsController;
 use Illuminate\Support\Facades\Route;
 
@@ -43,6 +44,10 @@ Route::middleware('auth.session')->group(function () {
         Route::get('settings/ai', [AiSettingsController::class, 'show']);
         Route::put('settings/ai', [AiSettingsController::class, 'update']);
         Route::post('settings/ai/test', [AiSettingsController::class, 'test']);
+
+        Route::get('settings/manual-apps', [ManualAppController::class, 'index']);
+        Route::post('settings/manual-apps', [ManualAppController::class, 'store']);
+        Route::delete('settings/manual-apps/{id}', [ManualAppController::class, 'destroy'])->whereNumber('id');
 
         Route::get('automation/triggers', [AutomationTriggerController::class, 'index']);
         Route::post('automation/triggers', [AutomationTriggerController::class, 'store']);
