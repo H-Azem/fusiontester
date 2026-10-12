@@ -78,6 +78,9 @@ Route::middleware('auth.session')->group(function () {
         ->whereNumber('projectId');
 
     Route::get('device/frame', [DeviceController::class, 'frame']);
+    Route::get('device/state', [DeviceController::class, 'state']);
+    Route::get('device/apps', [DeviceController::class, 'apps']);
+    Route::post('device/install', [DeviceController::class, 'install']);
     Route::post('device/tap', [DeviceController::class, 'tap']);
     Route::post('device/swipe', [DeviceController::class, 'swipe']);
     Route::post('device/text', [DeviceController::class, 'text']);

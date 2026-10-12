@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\ManualApp;
+use App\Repositories\Manual\ManualAppRepository;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\Process\Process;
@@ -86,6 +88,70 @@ class DeviceController extends Controller
         }
 
         return $this->legacyResponse(['ok' => true]);
+    }
+
+    /** Is the device there? A build puts it to sleep, and the page should say so. */
+    public function state(): JsonResponse
+    {
+        $this->connect();
+
+        return $this->legacyResponse([
+            'reachable' => trim((string) $this->adb(['shell', 'getprop', 'sys.boot_completed'])) === '1',
+        ]);
+    }
+
+    /** The apps that can be installed by hand, each with the build it would install. */
+    public function apps(): JsonResponse
+    {
+        $apps = (new ManualAppRepository)->all()->map(function (ManualApp $app): array {
+            $path = (string) ($app->getApkPath() ?? '');
+
+            return [
+                'id' => (int) $app->getId(),
+                'title' => $app->getTitle(),
+                'branch' => $app->getBranch(),
+                'builtAt' => $app->getApkBuiltAt()?->toIso8601String(),
+                'ready' => $path !== '' && is_file($path),
+                'buildError' => $app->getBuildError(),
+            ];
+        })->all();
+
+        return $this->legacyResponse(['apps' => $apps]);
+    }
+
+    /** Installs one app's built APK on the device. */
+    public function install(Request $request): JsonResponse
+    {
+        $validated = $request->validate(['appId' => ['required', 'integer', 'min:1']]);
+        $app = (new ManualAppRepository)->find((int) $validated['appId']);
+        $path = (string) ($app?->getApkPath() ?? '');
+
+        if ($app === null || $path === '' || ! is_file($path)) {
+            return $this->legacyResponse(
+                ['error' => 'no_build', 'message' => 'That app has no built APK yet.'],
+                Response::HTTP_CONFLICT
+            );
+        }
+
+        $this->connect();
+
+        $process = new Process(
+            array_merge([(string) config('fusion.android.adb'), '-s', (string) config('fusion.android.device')], ['install', '-r', $path]),
+            null,
+            null,
+            null,
+            self::TIMEOUT_SECONDS
+        );
+
+        try {
+            $process->run();
+        } catch (\Throwable $exception) {
+            return $this->legacyResponse(['error' => 'device_unavailable', 'message' => $exception->getMessage()], Response::HTTP_SERVICE_UNAVAILABLE);
+        }
+
+        return $process->isSuccessful()
+            ? $this->legacyResponse(['ok' => true, 'detail' => trim($process->getOutput())])
+            : $this->legacyResponse(['error' => 'install_failed', 'message' => trim($process->getOutput().' '.$process->getErrorOutput())], Response::HTTP_BAD_REQUEST);
     }
 
     /** adb holds one connection per device, and a restarted container needs a new one. */
