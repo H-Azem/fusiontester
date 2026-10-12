@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\BuildManualAppJob;
 use App\Models\ManualApp;
 use App\Repositories\Manual\ManualAppRepository;
 use Illuminate\Http\JsonResponse;
@@ -86,6 +87,41 @@ class DeviceController extends Controller
         if ($this->adb($args) === null) {
             return $this->legacyResponse(['error' => 'device_unavailable'], Response::HTTP_SERVICE_UNAVAILABLE);
         }
+
+        return $this->legacyResponse(['ok' => true]);
+    }
+
+    /**
+     * Turns the device: the app lays itself out from the screen it is handed, so a
+     * landscape app on a portrait screen puts its controls where nothing is.
+     */
+    public function orientation(Request $request): JsonResponse
+    {
+        $validated = $request->validate(['orientation' => ['required', 'in:horizontal,vertical']]);
+
+        $vertical = $validated['orientation'] === 'vertical';
+
+        $this->connect();
+        $this->adb(['shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0']);
+        $this->adb(['shell', 'settings', 'put', 'system', 'user_rotation', $vertical ? '0' : '1']);
+
+        if ($this->adb(['shell', 'wm', 'size', $vertical ? '1080x1920' : '1920x1080']) === null) {
+            return $this->legacyResponse(['error' => 'device_unavailable'], Response::HTTP_SERVICE_UNAVAILABLE);
+        }
+
+        return $this->legacyResponse(['ok' => true, 'orientation' => $validated['orientation']]);
+    }
+
+    /** Rebuilds one app's APK now, from this page. */
+    public function rebuild(Request $request): JsonResponse
+    {
+        $validated = $request->validate(['appId' => ['required', 'integer', 'min:1']]);
+
+        if ((new ManualAppRepository)->find((int) $validated['appId']) === null) {
+            return $this->legacyResponse(['error' => 'not_found'], Response::HTTP_NOT_FOUND);
+        }
+
+        BuildManualAppJob::dispatch((int) $validated['appId']);
 
         return $this->legacyResponse(['ok' => true]);
     }

@@ -81,6 +81,8 @@ Route::middleware('auth.session')->group(function () {
     Route::get('device/state', [DeviceController::class, 'state']);
     Route::get('device/apps', [DeviceController::class, 'apps']);
     Route::post('device/install', [DeviceController::class, 'install']);
+    Route::post('device/rebuild', [DeviceController::class, 'rebuild']);
+    Route::post('device/orientation', [DeviceController::class, 'orientation']);
     Route::post('device/tap', [DeviceController::class, 'tap']);
     Route::post('device/swipe', [DeviceController::class, 'swipe']);
     Route::post('device/text', [DeviceController::class, 'text']);

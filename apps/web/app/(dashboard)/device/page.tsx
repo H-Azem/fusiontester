@@ -29,6 +29,9 @@ export default function DevicePage() {
   const [apps, setApps] = useState<ManualApp[]>([]);
   const [reachable, setReachable] = useState(true);
   const [installingId, setInstallingId] = useState<number | null>(null);
+  const [rebuildingId, setRebuildingId] = useState<number | null>(null);
+  const [orientation, setOrientation] = useState<"horizontal" | "vertical">("horizontal");
+  const [rotating, setRotating] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -80,6 +83,47 @@ export default function DevicePage() {
     }
   }
 
+  /** Rebuilding goes through the queue, so the new build time lands a few minutes later. */
+  async function rebuild(app: ManualApp) {
+    setRebuildingId(app.id);
+    setNote(null);
+
+    try {
+      await fetch("/api/device/rebuild", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ appId: app.id }),
+      });
+
+      setNote(`Rebuilding ${app.title}… its build time will update when it lands.`);
+    } finally {
+      setRebuildingId(null);
+    }
+  }
+
+  /** Turning the device remounts the frame, so the stream comes back at the new shape. */
+  async function rotate(value: "horizontal" | "vertical") {
+    setRotating(true);
+    setNote(null);
+
+    try {
+      const response = await fetch("/api/device/orientation", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ orientation: value }),
+      });
+
+      if (response.ok) {
+        setOrientation(value);
+        setRun((current) => current + 1);
+      } else {
+        setNote("The device did not accept the new orientation.");
+      }
+    } finally {
+      setRotating(false);
+    }
+  }
+
   return (
     <section className="panel">
       <div className="panel-head">
@@ -90,6 +134,35 @@ export default function DevicePage() {
           </p>
         </div>
         <div className="row" style={{ gap: 8 }}>
+          {started && (
+            <div className="row" style={{ gap: 4 }} role="group" aria-label="Screen orientation">
+              {(["horizontal", "vertical"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={orientation === value ? "md-button tonal small" : "md-button text small"}
+                  aria-pressed={orientation === value}
+                  onClick={() => void rotate(value)}
+                  disabled={rotating}
+                  title={value === "horizontal" ? "Landscape" : "Portrait"}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+                    <rect
+                      x={value === "horizontal" ? 2 : 6}
+                      y={value === "horizontal" ? 6 : 2}
+                      width={value === "horizontal" ? 20 : 12}
+                      height={value === "horizontal" ? 12 : 20}
+                      rx="2"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    />
+                  </svg>
+                  {value === "horizontal" ? "Landscape" : "Portrait"}
+                </button>
+              ))}
+            </div>
+          )}
           {started ? (
             <button type="button" className="md-button tonal" onClick={start}>
               <Icon name="refresh" size={18} />
@@ -163,6 +236,16 @@ export default function DevicePage() {
                       status={app.buildError ? "failed" : app.ready ? "passed" : "queued"}
                       label={app.buildError ? "build failed" : app.ready ? "ready" : "no build"}
                     />
+                    <button
+                      type="button"
+                      className="md-button text small"
+                      onClick={() => void rebuild(app)}
+                      disabled={rebuildingId === app.id}
+                      title="Build this app's APK from its branch again"
+                    >
+                      {rebuildingId === app.id ? <span className="spinner" /> : <Icon name="refresh" size={16} />}
+                      {rebuildingId === app.id ? "Rebuilding…" : "Rebuild now"}
+                    </button>
                     <button
                       type="button"
                       className="md-button filled"
