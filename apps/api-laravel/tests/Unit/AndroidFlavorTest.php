@@ -2,9 +2,8 @@
 
 namespace Tests\Unit;
 
-use App\Services\Run\ExecuteRunAction;
+use App\Services\Run\ApkBuilder;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
 
 /**
  * An entry point names its flavor, but Gradle does not always spell it the same way:
@@ -15,9 +14,7 @@ class AndroidFlavorTest extends TestCase
 {
     private string $dir;
 
-    private object $action;
-
-    private ReflectionMethod $flavorFor;
+    private ApkBuilder $builder;
 
     protected function setUp(): void
     {
@@ -26,9 +23,7 @@ class AndroidFlavorTest extends TestCase
         $this->dir = sys_get_temp_dir().'/flavor-'.uniqid();
         mkdir($this->dir.'/android/app', 0775, true);
 
-        $this->action = (new \ReflectionClass(ExecuteRunAction::class))->newInstanceWithoutConstructor();
-        $this->flavorFor = new ReflectionMethod($this->action, 'flavorFor');
-        $this->flavorFor->setAccessible(true);
+        $this->builder = new ApkBuilder;
     }
 
     protected function tearDown(): void
@@ -93,6 +88,6 @@ class AndroidFlavorTest extends TestCase
 
     private function flavor(string $program): ?string
     {
-        return $this->flavorFor->invoke($this->action, $this->dir, $program);
+        return $this->builder->flavorFor($this->dir, $program);
     }
 }

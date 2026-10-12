@@ -27,21 +27,11 @@ class ExecuteRunAction
 {
     const COMMAND_TIMEOUT_SECONDS = 600;
 
-    /**
-     * A cold Android build on this host (Gradle dependencies plus Kotlin plugin
-     * compilation) runs to ~15 minutes, so the ceiling sits above that rather than
-     * killing a legitimate build at the boundary.
-     */
-    const BUILD_TIMEOUT_SECONDS = 1800;
-
     const MAESTRO_TIMEOUT_SECONDS = 1200;
 
     const INSTALL_TIMEOUT_SECONDS = 600;
 
     const ADB_TIMEOUT_SECONDS = 120;
-
-    /** The redroid container runs x86_64; Flutter builds ARM unless asked otherwise. */
-    const ANDROID_TARGET = 'android-x64';
 
     /** The kiosk lays itself out from the viewport it is handed, on this design canvas. */
     const SCREEN_SIZE_VERTICAL = '1080x1920';
@@ -70,6 +60,7 @@ class ExecuteRunAction
         private DevicePower $power = new DevicePower,
         private TelegramNotifier $telegram = new TelegramNotifier,
         private Directory $directories = new Directory,
+        private ApkBuilder $apks = new ApkBuilder,
     ) {}
 
     public function handle(): void
@@ -127,7 +118,7 @@ class ExecuteRunAction
             // A manual run is about the artifact, not a test: keep the built APK
             // where it can be downloaded once before the workspace is thrown away.
             if ($android && in_array(Run::KIND_MANUAL, $kinds, true)) {
-                $apk = $this->latestApk($repoDir);
+                $apk = $this->apks->latestApk($repoDir);
 
                 if ($apk !== null) {
                     $this->runs->publishApk($this->run, $apk);
@@ -321,152 +312,11 @@ class ExecuteRunAction
             $this->power->sleep();
         }
 
-        $this->capGradleMemory($repoDir);
-
-        $args = ['flutter', 'build', 'apk', '--debug', '--target-platform', self::ANDROID_TARGET, '-t', $target['program']];
-
-        // Without an explicit flavor Gradle packages every variant of the debug
-        // build, so a run aimed at `main_develop.dart` also spends minutes (and
-        // risks failing) on the production flavor it will never install.
-        $flavor = $this->flavorFor($repoDir, (string) $target['program']);
-
-        if ($flavor !== null) {
-            array_push($args, '--flavor', $flavor);
-        }
-
-        foreach ($this->extraDartDefines() as $define) {
-            $args[] = '--dart-define='.$define;
-        }
-
-        $result = $this->process($args, $repoDir, self::BUILD_TIMEOUT_SECONDS);
-
-        // The daemon keeps its heap until told to stop, and the device test needs
-        // that memory back on a machine this small.
-        $this->process([$repoDir.'/android/gradlew', '--stop'], $repoDir.'/android', self::ADB_TIMEOUT_SECONDS);
-
-        $commandLine = '$ '.implode(' ', $args);
+        $result = $this->apks->build($repoDir, (string) $target['program'], $this->extraDartDefines());
 
         $result['ok']
-            ? $this->runs->finishStage($this->run, 'build', $commandLine."\n\n".($result['output'] ?: 'APK built.'))
-            : $this->runs->failRun($this->run, 'build', $commandLine."\n\n".$result['output']);
-    }
-
-    /**
-     * An entry point names its flavor, but not always in the spelling Gradle uses:
-     * `main_general_app.dart` belongs to the `generalApp` flavor, while
-     * `main_develop.dart` is plain `develop`. Guessing from the file alone turned
-     * `general_app` into `--flavor general_app`, and Gradle answered with
-     * "Task 'assembleGeneral_appDebug' not found". So the file gives a candidate and
-     * the Android project's own flavor list decides the spelling.
-     */
-    private function flavorFor(string $repoDir, string $program): ?string
-    {
-        if (preg_match('#/main_([A-Za-z0-9_]+)\.dart$#', $program, $matches) !== 1) {
-            return null;
-        }
-
-        $suffix = $matches[1];
-        $wanted = $this->normalizeFlavor($suffix);
-
-        foreach ($this->declaredFlavors($repoDir) as $declared) {
-            if ($this->normalizeFlavor($declared) === $wanted) {
-                return $declared;
-            }
-        }
-
-        // No readable Gradle file: camelCase is the Flutter convention.
-        return $this->camelCase($suffix);
-    }
-
-    /** Underscores and case are the two things that differ between the two names. */
-    private function normalizeFlavor(string $name): string
-    {
-        return strtolower(str_replace('_', '', $name));
-    }
-
-    private function camelCase(string $name): string
-    {
-        $parts = explode('_', $name);
-        $first = array_shift($parts) ?? '';
-
-        return $first.implode('', array_map(ucfirst(...), $parts));
-    }
-
-    /**
-     * The product flavors an Android project declares, in both Gradle dialects:
-     * `create("generalApp")` in Kotlin DSL and `generalApp { }` in Groovy.
-     *
-     * @return array<int, string>
-     */
-    private function declaredFlavors(string $repoDir): array
-    {
-        foreach ([$repoDir.'/android/app/build.gradle.kts', $repoDir.'/android/app/build.gradle'] as $path) {
-            if (! is_file($path)) {
-                continue;
-            }
-
-            $source = (string) file_get_contents($path);
-            $at = strpos($source, 'productFlavors');
-
-            if ($at === false) {
-                continue;
-            }
-
-            // The block is not delimited safely (flavors nest their own braces), so
-            // the window after the keyword is scanned instead.
-            preg_match_all(
-                '/create\(\s*"([A-Za-z0-9_]+)"|^\s*([A-Za-z][A-Za-z0-9_]*)\s*\{/m',
-                substr($source, $at, 4000),
-                $names,
-                PREG_SET_ORDER
-            );
-
-            $found = [];
-
-            foreach ($names as $match) {
-                $name = $match[1] !== '' ? $match[1] : ($match[2] ?? '');
-                if ($name !== '') {
-                    $found[] = $name;
-                }
-            }
-
-            if ($found !== []) {
-                return $found;
-            }
-        }
-
-        return [];
-    }
-
-    /**
-     * Apps ship a gradle.properties written for a developer machine — -Xmx8G is
-     * common — and the Gradle daemon then dies on a shared server with "daemon
-     * disappeared unexpectedly". The heap is rewritten to what this box can spare,
-     * and Jetifier is switched off: jetifying the Flutter engine jar is the build's
-     * memory peak, and it only matters for the pre-AndroidX support libraries these
-     * apps do not use.
-     */
-    private function capGradleMemory(string $repoDir): void
-    {
-        $path = rtrim($repoDir, '/').'/android/gradle.properties';
-
-        if (! is_file($path)) {
-            return;
-        }
-
-        $source = (string) file_get_contents($path);
-
-        $args = '-Xmx'.(int) config('fusion.android.gradle_heap_mb').'m -XX:MaxMetaspaceSize=512m';
-
-        $source = preg_match('/^[ \t]*org\.gradle\.jvmargs\s*=.*$/m', $source) === 1
-            ? (string) preg_replace('/^[ \t]*org\.gradle\.jvmargs\s*=.*$/m', 'org.gradle.jvmargs='.$args, $source, 1)
-            : rtrim($source, "\n")."\norg.gradle.jvmargs=".$args."\n";
-
-        $source = preg_match('/^[ \t]*android\.enableJetifier\s*=/m', $source) === 1
-            ? (string) preg_replace('/^[ \t]*android\.enableJetifier\s*=.*$/m', 'android.enableJetifier=false', $source, 1)
-            : $source;
-
-        file_put_contents($path, $source);
+            ? $this->runs->finishStage($this->run, 'build', $result['command']."\n\n".($result['output'] ?: 'APK built.'))
+            : $this->runs->failRun($this->run, 'build', $result['command']."\n\n".$result['output']);
     }
 
     /**
@@ -558,7 +408,7 @@ class ExecuteRunAction
             return;
         }
 
-        $apk = $this->latestApk($repoDir);
+        $apk = $this->apks->latestApk($repoDir);
 
         if ($apk === null) {
             $this->runs->failRun($this->run, 'browse', 'The build produced no APK to install.');
@@ -814,20 +664,6 @@ class ExecuteRunAction
             'maestro',
             'Ran '.count($resolved['flows'])." flow(s): {$counts}.".$smokeNote."\n\nFlows: ".(implode(', ', $resolved['flows']))."\n\n".self::stripMaestroPromo($result['output'])
         );
-    }
-
-    /** Flutter names the APK after the flavor, so the newest one is the one we built. */
-    private function latestApk(string $repoDir): ?string
-    {
-        $found = glob(rtrim($repoDir, '/').'/build/app/outputs/flutter-apk/*.apk') ?: [];
-
-        if ($found === []) {
-            return null;
-        }
-
-        usort($found, fn (string $a, string $b) => filemtime($b) <=> filemtime($a));
-
-        return $found[0];
     }
 
     /** @return array<int, string> */
