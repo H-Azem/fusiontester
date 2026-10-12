@@ -16,7 +16,7 @@ const NAV = [
   { href: "/", label: "Dashboard", icon: "dashboard" },
   { href: "/projects", label: "Test apps", icon: "apps" },
   { href: "/runs", label: "Test runs", icon: "runs" },
-  { href: "/device", label: "Device", icon: "device" },
+  { href: "/device", label: "Manual test", icon: "device" },
   { href: "/automation", label: "Automate", icon: "bolt" },
   { href: "/settings", label: "Settings", icon: "settings" },
 ];
@@ -25,7 +25,7 @@ const TITLES: Record<string, string> = {
   "/": "Dashboard",
   "/projects": "Test apps",
   "/runs": "Test runs",
-  "/device": "Device",
+  "/device": "Manual test",
   "/automation": "Automate test",
   "/settings": "Settings",
 };

@@ -23,7 +23,7 @@ export default function DevicePage() {
     <section className="panel">
       <div className="panel-head">
         <div>
-          <h2>Device</h2>
+          <h2>Manual test</h2>
           <p className="panel-sub">
             The emulator, live. Touch, scroll and the keyboard go straight to the device.
           </p>
