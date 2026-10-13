@@ -25,8 +25,14 @@ class FlutterInspector
     /** Reusable subflows, not tests; Maestro's own convention. */
     const NON_TEST_FLOW_FOLDERS = ['shared'];
 
-    /** Whole-app suites, orchestrated rather than run as one flow. */
-    const EXCLUSIVE_TEST_FOLDERS = ['full_app'];
+    /**
+     * The whole-application suite, which takes over from the individual tests.
+     *
+     * A repository writes it one of two ways: as `full_test.yaml` at the root of the
+     * flows, beside the feature folders, or as a `full_app` folder of numbered flows.
+     * Both are read here and offered as this one test.
+     */
+    const WHOLE_SUITE_TEST = 'full_app';
 
     /** Presence of any of these marks a runnable application. */
     const PLATFORM_DIRECTORIES = ['android', 'ios', 'web', 'linux', 'macos', 'windows'];
@@ -91,11 +97,16 @@ class FlutterInspector
         $tests = [];
 
         foreach ($this->leaves($connection, $projectId, $ref) as $relative) {
+            $wholeSuite = $relative === self::WHOLE_SUITE_TEST;
+
             $tests[] = [
                 'name' => $relative,
                 'displayName' => self::displayNameFor($relative),
-                'path' => self::MAESTRO_FLOWS_PATH.'/'.$relative,
-                'exclusive' => in_array(basename($relative), self::EXCLUSIVE_TEST_FOLDERS, true),
+                // The suite is named for the folder form, but either form is one test.
+                'path' => $wholeSuite
+                    ? self::MAESTRO_FLOWS_PATH.'/'.self::TEST_FLOW_FILE
+                    : self::MAESTRO_FLOWS_PATH.'/'.$relative,
+                'exclusive' => $wholeSuite,
             ];
         }
 
@@ -170,6 +181,7 @@ class FlutterInspector
         $entries = $this->client->getTree($connection, $projectId, $ref, $path) ?? [];
 
         $hasEntryFlow = false;
+        $hasWholeSuite = false;
         $folders = [];
 
         foreach ($entries as $entry) {
@@ -181,10 +193,23 @@ class FlutterInspector
 
             if (($entry['type'] ?? '') === 'blob') {
                 $hasEntryFlow = $hasEntryFlow || $name === self::TEST_FLOW_FILE;
+                // At the root of the flows, `full_test.yaml` is the whole application
+                // rather than one folder's entry point.
+                $hasWholeSuite = $hasWholeSuite || ($relative === '' && $name === self::TEST_FLOW_FILE);
                 continue;
             }
 
-            if (($entry['type'] ?? '') !== 'tree' || $this->isReservedFolder($name)) {
+            if (($entry['type'] ?? '') !== 'tree') {
+                continue;
+            }
+
+            if ($name === self::WHOLE_SUITE_TEST) {
+                // The other way a repository writes it: a folder of numbered flows.
+                $hasWholeSuite = $hasWholeSuite || $relative === '';
+                continue;
+            }
+
+            if ($this->isReservedFolder($name)) {
                 continue;
             }
 
@@ -204,6 +229,10 @@ class FlutterInspector
             );
         }
 
+        if ($relative === '' && $hasWholeSuite) {
+            return array_merge([self::WHOLE_SUITE_TEST], $leaves);
+        }
+
         if ($leaves !== []) {
             return $leaves;
         }
@@ -214,11 +243,7 @@ class FlutterInspector
 
     private function isReservedFolder(string $folder): bool
     {
-        return in_array(
-            $folder,
-            array_merge(self::NON_TEST_FLOW_FOLDERS, self::EXCLUSIVE_TEST_FOLDERS),
-            true
-        );
+        return in_array($folder, self::NON_TEST_FLOW_FOLDERS, true);
     }
 
     private function inspectPubspec(

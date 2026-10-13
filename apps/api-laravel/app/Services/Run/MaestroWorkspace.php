@@ -77,7 +77,7 @@ class MaestroWorkspace
         }
 
         foreach ($tests as $test) {
-            if (in_array($test, FlutterInspector::EXCLUSIVE_TEST_FOLDERS, true)) {
+            if ($test === FlutterInspector::WHOLE_SUITE_TEST) {
                 return $tests;
             }
         }
@@ -104,6 +104,28 @@ class MaestroWorkspace
 
         foreach ($tests as $test) {
             $folder = rtrim($maestroRoot, '/').'/'.self::FLOWS_DIR.'/'.$test;
+
+            // The whole-application suite: one entry flow, or the folder of flows that
+            // stands in for it, in the order they are numbered.
+            if ($test === FlutterInspector::WHOLE_SUITE_TEST) {
+                if (is_file($folder.'/'.FlutterInspector::TEST_FLOW_FILE)) {
+                    $flows[] = $folder.'/'.FlutterInspector::TEST_FLOW_FILE;
+                    continue;
+                }
+
+                $suite = [];
+                foreach (scandir($folder) ?: [] as $entry) {
+                    if (is_file($folder.'/'.$entry) && preg_match('/\.ya?ml$/i', $entry) === 1) {
+                        $suite[] = $folder.'/'.$entry;
+                    }
+                }
+                sort($suite);
+
+                if ($suite !== []) {
+                    array_push($flows, ...$suite);
+                    continue;
+                }
+            }
 
             if (is_file($folder.'/full_test.yaml')) {
                 $flows[] = $folder.'/full_test.yaml';
