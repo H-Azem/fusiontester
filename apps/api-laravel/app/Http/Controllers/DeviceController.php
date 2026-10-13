@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Jobs\BuildManualAppJob;
 use App\Models\ManualApp;
 use App\Repositories\Manual\ManualAppRepository;
+use App\Services\Device\ManualTestSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\Process\Process;
@@ -126,6 +127,17 @@ class DeviceController extends Controller
         return $this->legacyResponse(['ok' => true]);
     }
 
+    /**
+     * The page is still open. An hour after the last of these, the apps it installed
+     * are removed — the emulator is not a place to leave things lying around.
+     */
+    public function activity(): JsonResponse
+    {
+        (new ManualTestSession)->touch();
+
+        return $this->legacyResponse(['ok' => true]);
+    }
+
     /** Is the device there? A build puts it to sleep, and the page should say so. */
     public function state(): JsonResponse
     {
@@ -171,6 +183,9 @@ class DeviceController extends Controller
 
         $this->connect();
 
+        $session = new ManualTestSession;
+        $before = $this->packages();
+
         $process = new Process(
             array_merge([(string) config('fusion.android.adb'), '-s', (string) config('fusion.android.device')], ['install', '-r', $path]),
             null,
@@ -185,9 +200,38 @@ class DeviceController extends Controller
             return $this->legacyResponse(['error' => 'device_unavailable', 'message' => $exception->getMessage()], Response::HTTP_SERVICE_UNAVAILABLE);
         }
 
-        return $process->isSuccessful()
-            ? $this->legacyResponse(['ok' => true, 'detail' => trim($process->getOutput())])
-            : $this->legacyResponse(['error' => 'install_failed', 'message' => trim($process->getOutput().' '.$process->getErrorOutput())], Response::HTTP_BAD_REQUEST);
+        if (! $process->isSuccessful()) {
+            return $this->legacyResponse(
+                ['error' => 'install_failed', 'message' => trim($process->getOutput().' '.$process->getErrorOutput())],
+                Response::HTTP_BAD_REQUEST
+            );
+        }
+
+        // What the install added is what this page owns; anything already on the device
+        // belongs to something else and is left alone.
+        foreach (array_diff($this->packages(), $before) as $package) {
+            $session->rememberInstalled($package);
+        }
+
+        $session->touch();
+
+        return $this->legacyResponse(['ok' => true, 'detail' => trim($process->getOutput())]);
+    }
+
+    /** @return array<int, string> */
+    private function packages(): array
+    {
+        $packages = [];
+
+        foreach (preg_split('/\R/', (string) $this->adb(['shell', 'pm', 'list', 'packages', '-3'])) ?: [] as $line) {
+            $line = trim($line);
+
+            if (str_starts_with($line, 'package:')) {
+                $packages[] = substr($line, strlen('package:'));
+            }
+        }
+
+        return $packages;
     }
 
     /** adb holds one connection per device, and a restarted container needs a new one. */

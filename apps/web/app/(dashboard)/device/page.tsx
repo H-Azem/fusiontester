@@ -16,6 +16,9 @@ type ManualApp = {
 
 const STATE_POLL_MS = 5000;
 
+/** An open page is a page in use; the cleanup timer reads this beat. */
+const HEARTBEAT_MS = 60000;
+
 /**
  * The device, live, with the apps that can be installed on it.
  *
@@ -58,6 +61,15 @@ export default function DevicePage() {
     const timer = setInterval(() => void load(), STATE_POLL_MS);
     return () => clearInterval(timer);
   }, [started, load]);
+
+  useEffect(() => {
+    const beat = () => void fetch("/api/device/activity", { method: "POST" });
+
+    beat();
+    const timer = setInterval(beat, HEARTBEAT_MS);
+
+    return () => clearInterval(timer);
+  }, []);
 
   /** Remounting the frame reloads the client, which re-runs its own auto-open. */
   function start() {

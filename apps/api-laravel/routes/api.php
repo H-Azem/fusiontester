@@ -80,6 +80,7 @@ Route::middleware('auth.session')->group(function () {
     Route::get('device/frame', [DeviceController::class, 'frame']);
     Route::get('device/state', [DeviceController::class, 'state']);
     Route::get('device/apps', [DeviceController::class, 'apps']);
+    Route::post('device/activity', [DeviceController::class, 'activity']);
     Route::post('device/install', [DeviceController::class, 'install']);
     Route::post('device/rebuild', [DeviceController::class, 'rebuild']);
     Route::post('device/orientation', [DeviceController::class, 'orientation']);
