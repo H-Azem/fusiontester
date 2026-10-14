@@ -150,32 +150,52 @@ class TelegramSettingsTest extends TestCase
         file_put_contents($path, json_encode([
             'summary' => 'One goal failed.',
             'goals' => [
-                ['text' => 'open customers', 'status' => 'pass'],
-                ['text' => 'add customer', 'status' => 'fail'],
+                ['text' => 'open customers', 'status' => 'pass', 'evidence' => 'customers_screen is on screen'],
+                ['text' => 'add customer', 'status' => 'fail', 'evidence' => 'the save button never appeared'],
             ],
             'usage' => ['inputTokens' => 1200, 'outputTokens' => 300],
         ]));
 
-        // Off: the report stays out of the message.
+        // A failure frame the lane kept travels with the report.
+        $shots = RunArtifacts::path('01900000-0000-7000-8000-00000000a1b2', RunArtifacts::AI_SHOTS);
+        @mkdir($shots, 0775, true);
+        $frame = $shots.'/1.png';
+        file_put_contents($frame, 'PNG');
+
+        // Off: the report stays out of the message, and no frames are uploaded.
         Http::fake();
         (new TelegramNotifier)->report($run);
-        Http::assertSent(fn ($request) => ! str_contains((string) $request['text'], 'AI report'));
 
-        // On: it is shared, with the goals and the token count.
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/sendMessage')
+            && ! str_contains((string) $request['text'], 'AI report'));
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), '/sendPhoto'));
+
+        // On: it is shared, with the goals, their evidence and the token count.
         $ai->save(array_merge($settings, ['shareReportToTelegram' => true]));
 
         Http::fake(['api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 1]])]);
         (new TelegramNotifier)->report($run);
 
         Http::assertSent(function ($request) {
+            if (! str_contains($request->url(), '/sendMessage')) {
+                return false;
+            }
+
             $text = (string) $request['text'];
 
             return str_contains($text, 'AI report')
                 && str_contains($text, 'open customers')
                 && str_contains($text, 'add customer')
+                && str_contains($text, 'customers_screen is on screen')
+                && str_contains($text, '2 checked · 1 failed')
                 && str_contains($text, '1,500');
         });
 
+        // The failing screen goes with it, as a photo.
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/sendPhoto'));
+
+        @unlink($frame);
+        @rmdir($shots);
         @unlink($path);
         @rmdir(dirname($path));
     }

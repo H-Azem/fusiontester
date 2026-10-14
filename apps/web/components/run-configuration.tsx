@@ -19,7 +19,7 @@ type Platform = "web" | "android";
 
 const RUN_KINDS: Array<{ id: RunKind; label: string; hint: string }> = [
   { id: "maestro", label: "Maestro flows", hint: "drives the recorded journeys" },
-  { id: "ai", label: "AI test", hint: "model picks the actions (web lane only)" },
+  { id: "ai", label: "AI test", hint: "drives the app on the device like a person" },
   { id: "manual", label: "Manual APK", hint: "just build it, and hand you a one-time download" },
 ];
 
@@ -129,6 +129,8 @@ export function RunConfiguration({
   const [live, setLive] = useState(true);
   const [dartDefines, setDartDefines] = useState("");
   const [aiContext, setAiContext] = useState("");
+  const [aiCustomTest, setAiCustomTest] = useState("");
+  const [aiOverride, setAiOverride] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
@@ -251,6 +253,8 @@ export function RunConfiguration({
           platform,
           live: platform === "android" && live,
           dartDefines,
+          aiCustomTest: aiCustomTest.trim(),
+          aiOverride: aiOverride && aiCustomTest.trim() !== "",
         }),
       });
 
@@ -275,6 +279,10 @@ export function RunConfiguration({
     runKinds.has("ai") ? "maestro + ai" : "maestro",
     platform === "android" ? "device" : "web",
   ].join(" · ");
+
+  const hasCustomTest = aiCustomTest.trim() !== "";
+  // An AI run can be a custom test on its own, so it does not need a picked flow.
+  const canStart = selectedTests.size > 0 || (runKinds.has("ai") && hasCustomTest);
 
   return (
     <>
@@ -507,6 +515,43 @@ export function RunConfiguration({
                 </label>
               )}
 
+              {runKinds.has("ai") && (
+                <label className="field">
+                  <span className="field-label">Custom test</span>
+                  <textarea
+                    value={aiCustomTest}
+                    onChange={(event) => setAiCustomTest(event.target.value)}
+                    rows={3}
+                    spellCheck={false}
+                    placeholder={"add a gift card for C$40\nthe customer list opens"}
+                  />
+                  <span className="hint">
+                    Your own test, one per line. It is checked in addition to the flows picked
+                    above — or, with the switch below, instead of them.
+                  </span>
+                </label>
+              )}
+
+              {runKinds.has("ai") && (
+                <label className="switch">
+                  <input
+                    type="checkbox"
+                    checked={aiOverride && hasCustomTest}
+                    disabled={!hasCustomTest}
+                    onChange={() => setAiOverride((current) => !current)}
+                  />
+                  <span>
+                    <span className="md-title-sm">Use only the custom test</span>
+                    <br />
+                    <span className="md-body-sm muted">
+                      {hasCustomTest
+                        ? "the flows selected above are not AI-checked"
+                        : "type a custom test above first"}
+                    </span>
+                  </span>
+                </label>
+              )}
+
               <details className="disclosure">
                 <summary>Advanced · extra build defines</summary>
                 <div className="stack" style={{ padding: "var(--space-4)" }}>
@@ -546,15 +591,17 @@ export function RunConfiguration({
                 type="button"
                 className="md-button filled"
                 onClick={() => void startTest()}
-                disabled={starting || selectedTests.size === 0}
+                disabled={starting || !canStart}
               >
                 {starting ? <span className="spinner" /> : <Icon name="runs" size={18} />}
                 {starting ? "Queueing…" : "Start test"}
               </button>
             </div>
 
-            {selectedTests.size === 0 && (
-              <p className="md-body-sm muted">Pick at least one test to run.</p>
+            {!canStart && (
+              <p className="md-body-sm muted">
+                Pick at least one test, or type a custom AI test.
+              </p>
             )}
           </div>
         </div>

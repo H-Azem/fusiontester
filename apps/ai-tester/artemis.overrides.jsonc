@@ -1,0 +1,67 @@
+{
+  // Deltas merged on top of the agent's own bundled config at start-up.
+  //
+  // The lane's model endpoint is OpenAI-compatible, so every node uses the
+  // "openai" provider pointing at OPENAI_BASE_URL. The literal "@@MODEL@@" is
+  // replaced with the run's model and "@@MAX_TURNS@@" with the run's step
+  // budget before the file is written.
+  "default": {
+    "provider": "openai",
+    "model": "@@MODEL@@",
+    "fallback": {
+      "provider": "openai",
+      "model": "@@MODEL@@"
+    }
+  },
+  "nodes": {
+    // These two would otherwise pin a Gemini Robotics model the endpoint does
+    // not serve; with the explorer on the "pro" tier below they are not used for
+    // grounding anyway, but they must not fail validation either.
+    "object_detector": {
+      "provider": "openai",
+      "model": "@@MODEL@@",
+      "fallback": {
+        "provider": "openai",
+        "model": "@@MODEL@@"
+      }
+    },
+    "hopper": {
+      "provider": "openai",
+      "model": "@@MODEL@@",
+      "fallback": {
+        "provider": "openai",
+        "model": "@@MODEL@@"
+      }
+    }
+  },
+  "agent": {
+    "flash": {
+      // No turn cap: a long journey that keeps making progress should not be cut
+      // off at a fixed number of steps. The budget is spent in tokens instead,
+      // enforced by the lane runner from the settings.
+      "max_turns": 0,
+      // The flash explorer delegates to the object detector, which wants a
+      // Gemini-ER model. The pro tier runs a plain multi-turn loop against the
+      // configured model instead.
+      "explorer_mode": "pro",
+      // The step summarizer builds a Google client even when a model is named.
+      "step_summarizer": {
+        "enabled": false,
+        "model": "@@MODEL@@"
+      }
+    },
+    "memory": {
+      "chunking": {
+        "model": "@@MODEL@@"
+      }
+    },
+    "video_analyzer": {
+      "enabled": false
+    },
+    "pro": {
+      "video_analyzer": {
+        "enabled": false
+      }
+    }
+  }
+}

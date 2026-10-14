@@ -196,3 +196,27 @@ systemctl is-active fusion-binderfs fusion-device-watch
 docker ps --filter name=redroid           # should be Up, or stopped deliberately between runs
 docker exec tester-api-1 /root/android-sdk/platform-tools/adb devices   # 172.17.0.1:5555 device
 ```
+
+## The AI lane container
+
+The AI lane runs **outside** compose. `apps/ai-tester` builds an image and
+`fusion-ai-lane.service` runs it on request, because the API deliberately has no
+Docker socket.
+
+```bash
+sudo apps/ai-tester/build.sh          # build tester-ai-tester, install the runner, restart the unit
+```
+
+- The agent inside is **pinned by commit** in the Dockerfile. A surprise upstream
+  release cannot change how a lane behaves mid-flight; rebuilding is deliberate.
+- The image is large (a Python environment with vision libraries, ~2 GB). Build it
+  when the disk has room — `docker system df` first, and `docker builder prune` if
+  the build cache has grown.
+- The first task on a device installs a small **accessibility helper**, which shows
+  as a collapsed "test helper is running" notification. It is benign and stays
+  between runs; remove it with `artemis helper uninstall` inside the image if a
+  device should be left untouched.
+- The lane reaches the model endpoint named in Settings and the device at
+  `172.17.0.1:5555`; nothing else. It is run with `--cap-drop ALL`,
+  `--security-opt no-new-privileges`, as a non-root user, with only `/work`
+  mounted.

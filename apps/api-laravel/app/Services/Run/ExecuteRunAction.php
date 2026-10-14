@@ -20,8 +20,8 @@ use Symfony\Component\Process\Process;
  * directly. The boot check is delegated to the Node sidecar, because reading a
  * Flutter web app's runtime state means reading its accessibility tree over CDP.
  * The AI lane instead writes a request for the host runner, which drives the app
- * on the device with the Command Code CLI inside a sandboxed container — this
- * process is given no Docker socket, so it cannot start one itself.
+ * on the device inside a sandboxed container — this process is given no Docker
+ * socket, so it cannot start one itself.
  */
 class ExecuteRunAction
 {
@@ -823,7 +823,14 @@ class ExecuteRunAction
 
         // Keep exactly what the lane was told, so a run that goes somewhere unexpected
         // can be explained from the run itself rather than guessed at.
-        $mission = $lane->mission($repoDir, $tests, $appId, $givenData);
+        $mission = $lane->mission(
+            $repoDir,
+            $tests,
+            $appId,
+            $givenData,
+            (string) ($this->run->getAiCustomTest() ?? ''),
+            (bool) $this->run->getAiOverride(),
+        );
         @mkdir(dirname(RunArtifacts::path($runId, RunArtifacts::AI_MISSION)), 0775, true);
         file_put_contents(RunArtifacts::path($runId, RunArtifacts::AI_MISSION), $mission);
 
@@ -859,15 +866,15 @@ class ExecuteRunAction
         if ($result['exit'] !== 0 || $this->aiGoalsFailed($goals)) {
             $this->runs->failRun($this->run, 'ai', implode("\n", array_filter([
                 $summary !== '' ? $summary : 'The AI lane reported a failure.',
-                // The CLI exits 8 when it runs out of turns, which is not the run's
+                // Exit 8 means the lane ran out of budget, which is not the run's
                 // own diagnosis — say what actually happened.
                 $result['exit'] === 8
-                    ? 'The lane ran out of steps before it finished; raise "Maximum steps per test" if the journey is long.'
+                    ? 'The lane hit its budget before it finished; raise "Maximum tokens per test" if the journey is long.'
                     : null,
                 $trace,
-                // stderr carries the CLI's own notices (config confirmations, the
-                // max-turns warning). They are not a diagnosis, so they are labelled
-                // as notes rather than dressed up as one.
+                // stderr carries the lane's own notices (configuration, the step
+                // budget). They are not a diagnosis, so they are labelled as notes
+                // rather than dressed up as one.
                 $result['stderr'] !== '' ? "\nLane notes:\n".$this->clipAiNotes($result['stderr']) : null,
             ])));
 
@@ -891,7 +898,7 @@ class ExecuteRunAction
         }
 
         // The report is kept as one self-contained file the panel can render: the
-        // agent's goals, plus the token usage from the CLI's result frame, which
+        // agent's goals, plus the token usage from the lane's result frame, which
         // only the pipeline sees.
         $report = is_file($work.'/report.json')
             ? (json_decode((string) file_get_contents($work.'/report.json'), true) ?: [])

@@ -1,42 +1,59 @@
-# The AI lane's brain: the Command Code CLI, driving the app on the device.
+# syntax=docker/dockerfile:1
+# The AI lane's brain: a multimodal Android agent driving the app on the device.
 #
 # Nothing else in the platform is reachable from here — no repository mount, no
-# database, no docker socket. The only host it may talk to is the Android device
-# over adb, and the only tool the agent may run is adb: that is enforced
-# fail-closed by the CLI's own permission engine (see settings.json), not by
-# convention or by asking the model nicely.
-FROM node:22-bookworm-slim
+# database, no docker socket. The only hosts it may talk to are the Android
+# device over adb and the run's model endpoint.
+#
+# The agent is pinned by commit: a surprise release cannot change how a lane
+# behaves mid-flight, and the image is rebuilt deliberately.
+FROM python:3.12-slim-bookworm
 
-ENV DEBIAN_FRONTEND=noninteractive
+ARG ARTEMIS_REF=351ca8422f7b5b54e80a9c1ce03a222e02415b6b
 
-# adb is the agent's only tool. The platform-tools client needs no privileges.
+ENV DEBIAN_FRONTEND=noninteractive \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/artemis/.venv \
+    UV_CACHE_DIR=/tmp/uv-cache
+
+# adb is the agent's hands; git is only needed to fetch the pinned source.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends adb ca-certificates passwd \
+ && apt-get install -y --no-install-recommends adb ca-certificates git \
  && rm -rf /var/lib/apt/lists/*
 
-# The brain itself. Pinned by major so a surprise breaking release cannot change
-# how a run behaves mid-flight; the image is rebuilt deliberately.
-RUN npm install -g command-code --no-audit --no-fund
+COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
 
-RUN useradd --create-home --shell /bin/sh tester \
- && mkdir -p /home/tester/lane/.commandcode /home/tester/.commandcode
+# Never root. The user is created first and everything after it is built as that
+# user, so nothing is ever handed over with a chown pass over a 1.5 GB tree.
+RUN useradd --create-home --uid 1001 --shell /bin/sh tester \
+ && mkdir -p /opt/artemis /opt/lane /opt/patches \
+ && chown tester:tester /opt/artemis /opt/lane
 
-# The pipeline's own workflows have no business here, and taste learning would
-# only add model calls. The lane does one thing: run the mission.
-COPY settings.json /home/tester/.commandcode/settings.json
-COPY settings.json /home/tester/lane/.commandcode/settings.json
-# The lane's job, in the CLI's own project-memory file: the adb workflow and the
-# report contract it must leave behind.
-COPY AGENTS.md /home/tester/lane/AGENTS.md
-COPY entrypoint.sh /usr/local/bin/ai-tester-entrypoint.sh
-# The lane reads this instead of the raw dump, which would drain its step budget.
-COPY ui-menu.sh /usr/local/bin/ui-menu
-
-RUN chmod +x /usr/local/bin/ai-tester-entrypoint.sh /usr/local/bin/ui-menu \
- && chown -R tester:tester /home/tester
-
-# Never root. A compromised agent owns nothing but its own home and the device.
 USER tester
-WORKDIR /home/tester/lane
+WORKDIR /opt/lane
 
-ENTRYPOINT ["/usr/local/bin/ai-tester-entrypoint.sh"]
+RUN git clone --depth 1 https://github.com/google/artemis.git /opt/artemis \
+ && cd /opt/artemis \
+ && git fetch --depth 1 origin "${ARTEMIS_REF}" \
+ && git checkout --detach FETCH_HEAD \
+ && rm -rf .git
+
+# One source change: the agent's history-chunking model must use the run's own
+# provider instead of hard-coding Google. The script fails the build if the
+# anchor has moved, so the image can never drift silently.
+COPY --chown=tester:tester patches/0001-non-google-provider.py /opt/patches/0001-non-google-provider.py
+RUN python /opt/patches/0001-non-google-provider.py /opt/artemis
+
+# The lane runner and the config deltas it merges into the agent's own config.
+COPY --chown=tester:tester lane.py /opt/lane/lane.py
+COPY --chown=tester:tester artemis.overrides.jsonc /opt/lane/artemis.overrides.jsonc
+
+# The environment lands already owned by the lane's user. Extraction scratch is a
+# tmpfs: on hosts whose overlay is under a tight quota, uv's many small writes
+# otherwise fail with EDQUOT even though the disk has room.
+RUN --mount=type=tmpfs,target=/tmp \
+    cd /opt/artemis \
+ && uv sync --frozen --no-dev --no-cache \
+ && rm -rf "${UV_CACHE_DIR}"
+
+ENTRYPOINT ["/opt/artemis/.venv/bin/python", "/opt/lane/lane.py"]

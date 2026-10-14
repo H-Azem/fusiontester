@@ -21,6 +21,8 @@ use Illuminate\Database\Eloquent\Model;
     self::PLATFORM,
     self::LIVE,
     self::DART_DEFINES,
+    self::AI_CUSTOM_TEST,
+    self::AI_OVERRIDE,
     self::APK_TOKEN,
     self::APK_DOWNLOADED_AT,
     self::ERROR_MESSAGE,
@@ -57,6 +59,12 @@ class Run extends Model implements BaseModelInterface
     const LIVE = 'live';
 
     const DART_DEFINES = 'dart_defines';
+
+    /** The operator's own AI test, one per line, typed in the run sheet. */
+    const AI_CUSTOM_TEST = 'ai_custom_test';
+
+    /** True when that test is checked *instead of* the flows selected in the picker. */
+    const AI_OVERRIDE = 'ai_override';
 
     const ERROR_MESSAGE = 'error_message';
 
@@ -115,6 +123,7 @@ class Run extends Model implements BaseModelInterface
             self::RUN_KINDS => 'array',
             self::ENVIRONMENTS => 'array',
             self::LIVE => 'boolean',
+            self::AI_OVERRIDE => 'boolean',
             self::APK_DOWNLOADED_AT => 'datetime',
             self::CREATED_AT => 'datetime',
             self::STARTED_AT => 'datetime',

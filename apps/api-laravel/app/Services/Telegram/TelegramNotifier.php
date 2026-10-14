@@ -41,6 +41,18 @@ class TelegramNotifier
         $result = $this->client->sendMessage($connection->token, $connection->chatId, $this->message($run, $passed), $connection->threadId);
 
         $this->connections->recordVerification($result['ok'], $result['ok'] ? null : $result['detail']);
+
+        // A failure is what a person wants to *see*, so the frames the lane kept go
+        // with the text. An upload that fails is not worth failing the notify over.
+        foreach ($this->aiFrames($run) as $index => $path) {
+            $this->client->sendPhoto(
+                $connection->token,
+                $connection->chatId,
+                $path,
+                $index === 0 ? '<b>AI report</b> · the failing screen' : '',
+                $connection->threadId,
+            );
+        }
     }
 
     /** The message a person reads on a phone: outcome first, then the specifics. */
@@ -95,21 +107,9 @@ class TelegramNotifier
      */
     private function aiReport(Run $run): ?string
     {
-        $connection = $this->ai->row();
+        $report = $this->aiReportData($run);
 
-        if ($connection === null || ! $connection->getShareReportToTelegram()) {
-            return null;
-        }
-
-        $path = RunArtifacts::path((string) $run->getId(), RunArtifacts::AI_REPORT);
-
-        if (! is_file($path)) {
-            return null;
-        }
-
-        $report = json_decode((string) file_get_contents($path), true);
-
-        if (! is_array($report)) {
+        if ($report === null) {
             return null;
         }
 
@@ -126,26 +126,90 @@ class TelegramNotifier
             $lines[] = htmlspecialchars($summary, ENT_QUOTES);
         }
 
+        $failed = 0;
+
         foreach ($goals as $goal) {
             if (! is_array($goal)) {
                 continue;
             }
 
-            $mark = strtolower((string) ($goal['status'] ?? '')) === 'pass' ? '✅' : '❌';
-            $lines[] = $mark.' '.htmlspecialchars((string) ($goal['text'] ?? ''), ENT_QUOTES);
+            $ok = strtolower((string) ($goal['status'] ?? '')) === 'pass';
+            $failed += $ok ? 0 : 1;
+            $lines[] = ($ok ? '✅' : '❌').' <b>'.htmlspecialchars((string) ($goal['text'] ?? ''), ENT_QUOTES).'</b>';
+
+            // The evidence is what makes the verdict checkable rather than a claim.
+            $evidence = trim((string) ($goal['evidence'] ?? ''));
+
+            if ($evidence !== '') {
+                $lines[] = '<i>'.htmlspecialchars($this->clip($evidence, 200), ENT_QUOTES).'</i>';
+            }
+        }
+
+        if ($goals !== []) {
+            $lines[] = count($goals).' checked · '.$failed.' failed';
         }
 
         $usage = $report['usage'] ?? null;
 
         if (is_array($usage)) {
-            $tokens = (int) ($usage['inputTokens'] ?? 0) + (int) ($usage['outputTokens'] ?? 0);
+            $in = (int) ($usage['inputTokens'] ?? 0);
+            $out = (int) ($usage['outputTokens'] ?? 0);
 
-            if ($tokens > 0) {
-                $lines[] = 'Tokens: '.number_format($tokens);
+            if ($in + $out > 0) {
+                $lines[] = 'Tokens: '.number_format($in + $out)
+                    .' ('.number_format($in).' in · '.number_format($out).' out)';
             }
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * The lane's report, but only when it produced one and the switch to share it is
+     * on. Null keeps the ordinary Maestro report unchanged.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function aiReportData(Run $run): ?array
+    {
+        $connection = $this->ai->row();
+
+        if ($connection === null || ! $connection->getShareReportToTelegram()) {
+            return null;
+        }
+
+        $path = RunArtifacts::path((string) $run->getId(), RunArtifacts::AI_REPORT);
+
+        if (! is_file($path)) {
+            return null;
+        }
+
+        $report = json_decode((string) file_get_contents($path), true);
+
+        return is_array($report) ? $report : null;
+    }
+
+    /**
+     * The frames the lane kept when something failed, newest last. Only sent when
+     * the AI report itself is shared, so a text-only setup stays text-only.
+     *
+     * @return array<int, string>
+     */
+    private function aiFrames(Run $run): array
+    {
+        if ($this->aiReportData($run) === null) {
+            return [];
+        }
+
+        $directory = RunArtifacts::path((string) $run->getId(), RunArtifacts::AI_SHOTS);
+        $frames = array_merge(
+            glob($directory.'/*.png') ?: [],
+            glob($directory.'/*.jpg') ?: [],
+        );
+
+        sort($frames);
+
+        return array_slice($frames, 0, 3);
     }
 
     private function firstFailedStep(Run $run): ?RunStep

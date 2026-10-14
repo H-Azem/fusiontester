@@ -55,6 +55,59 @@ class TelegramClient
     }
 
     /**
+     * Uploads a local image. Telegram wants multipart for a file, so this is the
+     * one call that does not go through the JSON helper.
+     *
+     * @return array{ok: bool, detail: string}
+     */
+    public function sendPhoto(string $token, string $chatId, string $path, string $caption = '', ?string $threadId = null): array
+    {
+        if (! is_file($path)) {
+            return ['ok' => false, 'detail' => 'the frame is gone: '.$path];
+        }
+
+        $handle = @fopen($path, 'r');
+
+        if ($handle === false) {
+            return ['ok' => false, 'detail' => 'the frame could not be read: '.$path];
+        }
+
+        $payload = [
+            'chat_id' => $chatId,
+            'caption' => $caption,
+            'parse_mode' => 'HTML',
+        ];
+
+        if ($threadId !== null && $threadId !== '') {
+            $payload['message_thread_id'] = $threadId;
+        }
+
+        try {
+            $response = Http::timeout(30)
+                ->attach('photo', $handle, basename($path))
+                ->post(self::API_BASE.'/bot'.$token.'/sendPhoto', $payload);
+        } catch (\Throwable $exception) {
+            return ['ok' => false, 'detail' => 'Could not reach Telegram: '.$exception->getMessage()];
+        } finally {
+            if (is_resource($handle)) {
+                fclose($handle);
+            }
+        }
+
+        $json = $response->json();
+        $json = is_array($json) ? $json : [];
+
+        if ($response->successful() && ($json['ok'] ?? false) === true) {
+            return ['ok' => true, 'detail' => 'photo delivered to '.$chatId];
+        }
+
+        return [
+            'ok' => false,
+            'detail' => (string) ($json['description'] ?? ('HTTP '.$response->status())),
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      * @return array{ok: bool, detail: string, json: array<string, mixed>}
      */

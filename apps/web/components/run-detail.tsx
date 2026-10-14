@@ -200,44 +200,61 @@ function AiReportPanel({ runId }: { runId: string }) {
   const tokens = usage ? (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0) : 0;
   const shots = report.screenshots ?? [];
 
+  const clean = failed === 0;
+
   return (
-    <section className="panel">
+    <section className="panel ai-report">
       <div className="panel-head">
         <div>
           <h2>AI report</h2>
           <p className="panel-sub">{report.summary ?? "The lane's verdict on each goal."}</p>
         </div>
         <StatusChip
-          status={failed > 0 ? "failed" : "passed"}
-          label={`${goals.length - failed}/${goals.length} goals`}
+          status={clean ? "passed" : "failed"}
+          label={
+            goals.length > 0
+              ? `${goals.length - failed}/${goals.length} goals`
+              : clean
+                ? "passed"
+                : "failed"
+          }
         />
       </div>
 
-      <ol className="stack" style={{ listStyle: "none", padding: 0, margin: 0 }}>
-        {goals.map((goal, index) => (
-          <li key={index} className="card filled">
-            <div className="row" style={{ justifyContent: "space-between", gap: 12 }}>
-              <span className="md-title-sm">{goal.text ?? "(unnamed goal)"}</span>
-              <StatusChip
-                status={goal.status === "fail" ? "failed" : "passed"}
-                label={goal.status === "fail" ? "fail" : "pass"}
-              />
-            </div>
-            {goal.evidence && <p className="md-body-sm muted">{goal.evidence}</p>}
-          </li>
-        ))}
-      </ol>
+      {goals.length > 0 && (
+        <ol className="ai-goals">
+          {goals.map((goal, index) => {
+            const ok = goal.status !== "fail";
+
+            return (
+              <li key={index} className={ok ? "ai-goal pass" : "ai-goal fail"}>
+                <span className="ai-goal-mark">
+                  <Icon name={ok ? "check" : "error"} size={16} />
+                </span>
+                <div className="ai-goal-body">
+                  <span className="md-title-sm">{goal.text ?? "(unnamed goal)"}</span>
+                  {goal.evidence && <p className="md-body-sm muted">{goal.evidence}</p>}
+                </div>
+                <StatusChip status={ok ? "passed" : "failed"} label={ok ? "pass" : "fail"} />
+              </li>
+            );
+          })}
+        </ol>
+      )}
 
       {tokens > 0 && (
-        <p className="md-body-sm muted">
-          {tokens.toLocaleString()} tokens
-          {usage?.inputTokens ? ` · ${usage.inputTokens.toLocaleString()} in` : ""}
-          {usage?.outputTokens ? ` · ${usage.outputTokens.toLocaleString()} out` : ""}
-        </p>
+        <div className="ai-usage">
+          <span className="mono">{tokens.toLocaleString()}</span>
+          <span className="md-body-sm muted">
+            tokens
+            {usage?.inputTokens ? ` · ${usage.inputTokens.toLocaleString()} in` : ""}
+            {usage?.outputTokens ? ` · ${usage.outputTokens.toLocaleString()} out` : ""}
+          </span>
+        </div>
       )}
 
       {shots.length > 0 && (
-        <div className="row" style={{ flexWrap: "wrap" }}>
+        <div className="ai-shots">
           {shots.map((file) => (
             <a key={file} href={`/api/runs/${runId}/ai-shot/${file}`} target="_blank" rel="noreferrer">
               {/* eslint-disable-next-line @next/next/no-img-element */}

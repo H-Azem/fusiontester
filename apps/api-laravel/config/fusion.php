@@ -92,7 +92,7 @@ return [
     ],
 
     /*
-     * The AI lane drives the app on the device with the Command Code CLI, inside a
+     * The AI lane drives the app on the device with a multimodal agent, inside a
      * sandboxed container that has no repository, no database and no Docker socket.
      * The API writes a request for the host runner to pick up and waits for its
      * verdict; nothing here can start a container itself.

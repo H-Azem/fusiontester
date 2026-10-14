@@ -33,6 +33,7 @@ class AiConnectionRepository
             (int) $row->getMaxSteps(),
             (bool) $row->getAiLaneEnabled(),
             (bool) $row->getShareReportToTelegram(),
+            (int) $row->getMaxTokens(),
         );
     }
 
@@ -66,6 +67,9 @@ class AiConnectionRepository
             AiConnection::SHARE_REPORT_TO_TELEGRAM => (bool) ($values['shareReportToTelegram']
                 ?? $current?->getShareReportToTelegram()
                 ?? false),
+            AiConnection::MAX_TOKENS => (int) ($values['maxTokens']
+                ?? $current?->getMaxTokens()
+                ?? AiConnection::DEFAULT_MAX_TOKENS),
         ];
 
         AiConnection::query()->delete();

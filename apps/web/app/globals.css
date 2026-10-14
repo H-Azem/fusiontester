@@ -2011,3 +2011,88 @@ details.disclosure > .output {
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   AI report — the lane's verdict, one row per goal. The tinted rail and the
+   mark carry the pass/fail tone, so a long list reads at a glance without a
+   column of chips competing with the text.
+   --------------------------------------------------------------------------- */
+.ai-goals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ai-goal {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--outline-variant);
+  border-inline-start-width: 3px;
+  border-radius: var(--shape-md);
+  background: var(--surface-container);
+}
+
+.ai-goal.pass {
+  border-inline-start-color: var(--success);
+}
+
+.ai-goal.fail {
+  border-inline-start-color: var(--error);
+}
+
+.ai-goal-mark {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
+  border-radius: var(--shape-full);
+}
+
+.ai-goal.pass .ai-goal-mark {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+}
+
+.ai-goal.fail .ai-goal-mark {
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 16%, transparent);
+}
+
+.ai-goal-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ai-goal-body p {
+  margin: 0;
+}
+
+.ai-usage {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--hairline);
+}
+
+.ai-usage .mono {
+  font-size: 18px;
+  color: var(--on-surface);
+}
+
+.ai-shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}

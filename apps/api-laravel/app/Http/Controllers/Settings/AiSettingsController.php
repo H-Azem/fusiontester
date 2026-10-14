@@ -6,6 +6,7 @@ use App\Actions\Settings\SaveAiConnectionAction;
 use App\Actions\Settings\TestAiConnectionAction;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\RequireSession;
+use App\Models\AiConnection;
 use App\Repositories\Settings\AiConnectionRepository;
 use App\Services\Ai\AiClient;
 use Illuminate\Http\JsonResponse;
@@ -25,6 +26,7 @@ class AiSettingsController extends Controller
                 'configured' => false,
                 'openaiBaseUrl' => 'https://api.openai.com/v1',
                 'jevBaseUrl' => 'https://api.typesafe.ai',
+                'maxTokens' => AiConnection::DEFAULT_MAX_TOKENS,
                 'aiLaneEnabled' => true,
                 'shareReportToTelegram' => false,
             ]);
@@ -38,6 +40,7 @@ class AiSettingsController extends Controller
             'jevBaseUrl' => $row->getJevBaseUrl(),
             'jevTokenHint' => $row->getJevTokenHint(),
             'maxSteps' => $row->getMaxSteps(),
+            'maxTokens' => (int) $row->getMaxTokens(),
             'aiLaneEnabled' => (bool) $row->getAiLaneEnabled(),
             'shareReportToTelegram' => (bool) $row->getShareReportToTelegram(),
             'lastVerifiedAt' => $row->getLastVerifiedAt()?->toIso8601String(),
@@ -54,7 +57,8 @@ class AiSettingsController extends Controller
             'openaiToken' => ['sometimes', 'nullable', 'string', 'max:500'],
             'jevBaseUrl' => ['required', 'string', 'max:500'],
             'jevToken' => ['sometimes', 'nullable', 'string', 'max:500'],
-            'maxSteps' => ['sometimes', 'nullable', 'integer', 'min:3', 'max:80'],
+            'maxSteps' => ['sometimes', 'nullable', 'integer', 'min:3', 'max:400'],
+            'maxTokens' => ['sometimes', 'nullable', 'integer', 'min:100000', 'max:100000000'],
             'aiLaneEnabled' => ['sometimes', 'boolean'],
             'shareReportToTelegram' => ['sometimes', 'boolean'],
         ]);
@@ -80,6 +84,7 @@ class AiSettingsController extends Controller
             'jevBaseUrl' => $result['jevBaseUrl'],
             'jevTokenHint' => $result['jevTokenHint'],
             'maxSteps' => $result['maxSteps'],
+            'maxTokens' => $result['maxTokens'],
             'aiLaneEnabled' => $result['aiLaneEnabled'],
             'shareReportToTelegram' => $result['shareReportToTelegram'],
         ]);

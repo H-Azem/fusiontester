@@ -27,31 +27,53 @@ class AiLane
      * script: the lane is told to behave like a person and adapt, because the
      * point of the lane is to discover how the app really behaves today.
      *
+     * A custom test — free text typed in the run sheet, one test per line — is
+     * checked alongside the selected flows, or, with $override, on its own.
+     *
      * @param array<int, string> $tests
      */
-    public function mission(string $repoDir, array $tests, string $appId, string $givenData = ''): string
-    {
+    public function mission(
+        string $repoDir,
+        array $tests,
+        string $appId,
+        string $givenData = '',
+        string $customTest = '',
+        bool $override = false,
+    ): string {
+        $custom = $this->customTests($customTest);
+        $replaced = $override && $custom !== [];
+
         $root = rtrim($repoDir, '/').'/'.MaestroWorkspace::MAESTRO_DIR;
         $resolved = (new MaestroWorkspace)->resolveFlows($root, $tests);
-        $goals = $this->goals->fromFlowFiles($resolved['flows']);
+        // An override replaces the journey, so the flows contribute no signals.
+        $goals = $replaced ? [] : $this->goals->fromFlowFiles($resolved['flows']);
 
         // Smoke is the sign-in, not a feature to test, so it is kept out of the list.
-        $features = array_values(array_filter(
+        $features = $replaced ? [] : array_values(array_filter(
             $tests,
             fn (string $test) => strcasecmp($test, MaestroWorkspace::SMOKE_FLOW) !== 0
         ));
+
+        $labels = array_map(
+            fn (string $feature) => FlutterInspector::displayNameFor($feature),
+            $features
+        );
+
+        // The operator's own tests are used verbatim: they are instructions, not
+        // flow names, so they must not go through the flow-name prettifier.
+        $labels = array_merge($labels, $custom);
 
         $lines = [
             'You are a real user of the app'.($appId === '' ? '' : ' '.$appId).' on the device.'
                 .' Test the features below the way a person would: use each one properly, not just open it.',
         ];
 
-        if ($features !== []) {
+        if ($labels !== []) {
             $lines[] = '';
             $lines[] = 'Features to test:';
 
-            foreach (array_values($features) as $index => $feature) {
-                $lines[] = ($index + 1).'. '.FlutterInspector::displayNameFor((string) $feature);
+            foreach (array_values($labels) as $index => $label) {
+                $lines[] = ($index + 1).'. '.$label;
             }
         } else {
             $lines[] = '';
@@ -82,6 +104,21 @@ class AiLane
         }
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * The custom test as individual tests: one per non-empty line.
+     *
+     * @return array<int, string>
+     */
+    private function customTests(string $customTest): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $customTest) ?: [];
+
+        return array_values(array_filter(
+            array_map('trim', $lines),
+            fn (string $line) => $line !== ''
+        ));
     }
 
     /**
@@ -133,6 +170,7 @@ class AiLane
             'FUSION_AI_MODEL='.$connection->model,
             'FUSION_AI_KEY='.$connection->openaiToken,
             'FUSION_MAX_TURNS='.$connection->maxSteps,
+            'FUSION_MAX_TOKENS='.$connection->maxTokens,
             'FUSION_DEVICE='.$device,
             'FUSION_APP_ID='.$appId,
         ])."\n");

@@ -13,6 +13,7 @@ type AiConfig = {
   jevBaseUrl?: string;
   jevTokenHint?: string;
   maxSteps?: number;
+  maxTokens?: number;
   aiLaneEnabled?: boolean;
   shareReportToTelegram?: boolean;
   lastVerifiedAt?: string | null;
@@ -39,6 +40,7 @@ export function AiSettings() {
   const [jevBaseUrl, setJevBaseUrl] = useState("");
   const [jevToken, setJevToken] = useState("");
   const [maxSteps, setMaxSteps] = useState("25");
+  const [maxTokens, setMaxTokens] = useState("10000000");
   const [aiLaneEnabled, setAiLaneEnabled] = useState(true);
   const [shareReportToTelegram, setShareReportToTelegram] = useState(false);
   const [result, setResult] = useState<TestResult | null>(null);
@@ -59,6 +61,7 @@ export function AiSettings() {
     setOpenaiModel(data.openaiModel ?? "");
     setJevBaseUrl(data.jevBaseUrl ?? "");
     setMaxSteps(String(data.maxSteps ?? 25));
+    setMaxTokens(String(data.maxTokens ?? 10000000));
     setAiLaneEnabled(data.aiLaneEnabled ?? true);
     setShareReportToTelegram(data.shareReportToTelegram ?? false);
   }, []);
@@ -84,6 +87,7 @@ export function AiSettings() {
           jevBaseUrl,
           jevToken: jevToken || undefined,
           maxSteps: Number(maxSteps),
+          maxTokens: Number(maxTokens),
           aiLaneEnabled,
           shareReportToTelegram,
         }),
@@ -223,14 +227,31 @@ export function AiSettings() {
             </label>
 
             <label className="field">
+              <span className="field-label">Maximum tokens per test</span>
+              <input
+                type="number"
+                min={100000}
+                max={100000000}
+                step={100000}
+                value={maxTokens}
+                onChange={(event) => setMaxTokens(event.target.value)}
+              />
+              <span className="hint">
+                The lane is not cut off by a step count — it stops once a test has spent
+                this many tokens, so a long journey can finish.
+              </span>
+            </label>
+
+            <label className="field">
               <span className="field-label">Maximum steps per test</span>
               <input
                 type="number"
                 min={3}
-                max={80}
+                max={400}
                 value={maxSteps}
                 onChange={(event) => setMaxSteps(event.target.value)}
               />
+              <span className="hint">Only used while the step-based lane is in place.</span>
             </label>
           </div>
         </div>

@@ -13,7 +13,7 @@ use Symfony\Component\Process\Process;
  * sidecar degrades into a clear message instead of a silent wrong answer.
  *
  * The AI lane is no longer one of those stages: it drives the app on the device
- * with the Command Code CLI, so it went to the host runner instead.
+ * itself, so it went to the host runner instead.
  */
 class BrowserSidecar
 {

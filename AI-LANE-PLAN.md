@@ -58,12 +58,10 @@ in run steps, and Settings holds `openaiBaseUrl`/`openaiModel`/`openaiToken` plu
 run with runKinds including ai
   -> the pipeline turns the Maestro flows into a plain-text goal list (no model, free)
   -> a host-side runner (user `dev`) starts the `ai-tester` container for that run
-  -> the container runs:  cmd -p … --yolo --output-format json --max-turns N
-       - it dumps the accessibility tree itself (uiautomator) and works from text:
-         a compact element menu costs ~400 tokens against ~1.5-2k for a screenshot
+  -> the container runs the agent against the device, bounded by max-steps
+       - it perceives the screen itself and works from the accessibility tree and pixels
        - it uses the Settings credentials as a BYOK provider
-       - at judgement points it asks Jev (one call, several typed questions)
-       - it captures a screenshot only when something fails, downscaled
+       - it captures a screenshot when something fails, downscaled
   -> report.json + screenshots/ land in a shared volume
   -> the API stores them as run artifacts, like Maestro's
   -> the report is shown in the panel, and sent to Telegram when that is enabled
@@ -77,10 +75,9 @@ run with runKinds including ai
    Reuse the existing credential fields.
 2. **Goals from Maestro**: a small service that reads the flow YAML and produces goals
    (`reach home`, `open customers`, `add a customer`, `it is visible`). No model involved.
-3. **`ai-tester` container**: node + the CLI + platform-tools; internal network with only the
-   device; no docker socket, no repo mount, no database; non-root; `--cap-drop ALL`; tool
-   allowlist of `adb` only (fail-closed); `--max-turns` bounded; key passed by env reference
-   (`$VAR`), never a file in the host's home.
+3. **`ai-tester` container**: the agent + platform-tools; internal network with only the
+   device; no docker socket, no repo mount, no database; non-root; `--cap-drop ALL`;
+   max-steps bounded; key passed by env reference, never a file in the host's home.
 4. **Host runner**: a small unit that picks up a request and runs the container, the same pattern
    as `fusion-device-watch`.
 5. **Report and screenshots**: goals with PASS/FAIL, the evidence text, the run's `usage` and

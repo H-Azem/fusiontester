@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Model;
     self::MAX_STEPS,
     self::AI_LANE_ENABLED,
     self::SHARE_REPORT_TO_TELEGRAM,
+    self::MAX_TOKENS,
 ])]
 class AiConnection extends Model implements BaseModelInterface
 {
@@ -47,6 +48,12 @@ class AiConnection extends Model implements BaseModelInterface
     /** Whether the lane's own report is sent to the configured Telegram channel. */
     const SHARE_REPORT_TO_TELEGRAM = 'share_report_to_telegram';
 
+    /**
+     * The ceiling the lane may spend on one test, in tokens (prompt + completion).
+     * The lane stops when it passes this, so a run cannot quietly cost a fortune.
+     */
+    const MAX_TOKENS = 'max_tokens';
+
     const LAST_VERIFIED_AT = 'last_verified_at';
 
     const LAST_VERIFY_OK = 'last_verify_ok';
@@ -55,12 +62,15 @@ class AiConnection extends Model implements BaseModelInterface
 
     const DEFAULT_MAX_STEPS = 25;
 
+    const DEFAULT_MAX_TOKENS = 10000000;
+
     protected $table = self::TABLE;
 
     protected function casts(): array
     {
         return [
             self::MAX_STEPS => 'integer',
+            self::MAX_TOKENS => 'integer',
             self::AI_LANE_ENABLED => 'boolean',
             self::SHARE_REPORT_TO_TELEGRAM => 'boolean',
             self::LAST_VERIFIED_AT => 'datetime',

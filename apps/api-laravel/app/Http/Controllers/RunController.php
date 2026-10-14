@@ -45,6 +45,8 @@ class RunController extends Controller
             'platform' => ['sometimes', 'in:web,android'],
             'live' => ['sometimes', 'boolean'],
             'dartDefines' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'aiCustomTest' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'aiOverride' => ['sometimes', 'boolean'],
         ]);
 
         $run = $this->runs->create([
@@ -58,6 +60,8 @@ class RunController extends Controller
             Run::PLATFORM => $validated['platform'] ?? ProjectSetting::PLATFORM_DEFAULT,
             Run::LIVE => $validated['live'] ?? false,
             Run::DART_DEFINES => $validated['dartDefines'] ?? '',
+            Run::AI_CUSTOM_TEST => $validated['aiCustomTest'] ?? null,
+            Run::AI_OVERRIDE => $validated['aiOverride'] ?? false,
         ]);
 
         ExecuteRunJob::dispatch((string) $run->getId());

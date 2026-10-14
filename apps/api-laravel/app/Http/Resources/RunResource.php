@@ -28,6 +28,8 @@ class RunResource extends JsonResource
             'platform' => $this->getPlatform(),
             'live' => (bool) $this->getLive(),
             'dartDefines' => (string) $this->getDartDefines(),
+            'aiCustomTest' => (string) ($this->getAiCustomTest() ?? ''),
+            'aiOverride' => (bool) $this->getAiOverride(),
             'status' => $this->getStatus(),
             'currentStep' => $this->getCurrentStep(),
             'errorMessage' => $this->getErrorMessage(),
