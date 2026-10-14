@@ -16,3 +16,5 @@ tsconfig.tsbuildinfo
 .commandcode/
 untitled-project/
 .data/
+__pycache__/
+*.pyc
