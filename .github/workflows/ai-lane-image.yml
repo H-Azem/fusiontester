@@ -1,0 +1,42 @@
+name: ai-lane image
+
+# Builds the AI lane's container image and publishes it to GHCR.
+#
+# The image bundles a pinned Python environment, which a small host cannot always
+# build locally (the layer writes can fail under a tight overlay quota) — so it is
+# built here, once, and pulled onto the host that runs the lane.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/ai-tester/**'
+      - '.github/workflows/ai-lane-image.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: apps/ai-tester
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/h-azem/tester-ai-tester:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
