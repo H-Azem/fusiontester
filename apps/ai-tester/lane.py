@@ -21,6 +21,7 @@ import json
 import os
 import shutil
 import sqlite3
+import subprocess
 import sys
 import traceback
 import uuid
@@ -69,11 +70,20 @@ def configure_endpoint() -> None:
     model = required("FUSION_AI_MODEL")
 
     device = os.environ.get("FUSION_DEVICE", "")
-    host, _, port = device.partition(":")
 
-    if host != "":
-        os.environ["ADB_HOST"] = host
-        os.environ["ADB_PORT"] = port or "5555"
+    if device != "":
+        # The adapter talks to a local adb *server*, which in turn knows the
+        # device. Pointing it straight at the device's adbd port makes it wait
+        # for a server handshake that never comes, so: start the server here and
+        # introduce the device to it, exactly as the old entrypoint did.
+        try:
+            subprocess.run(["adb", "start-server"], timeout=30, check=False)
+            subprocess.run(["adb", "connect", device], timeout=30, check=False)
+        except (OSError, subprocess.SubprocessError) as exc:
+            note(f"could not introduce adb to {device}: {exc}")
+
+        os.environ.setdefault("ADB_HOST", "127.0.0.1")
+        os.environ.setdefault("ADB_PORT", "5037")
         os.environ["ADB_DEVICE_SERIAL"] = device
 
     # The lane's own endpoint, by reference: the key stays in the environment.
