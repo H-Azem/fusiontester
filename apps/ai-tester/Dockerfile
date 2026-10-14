@@ -16,9 +16,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_PROJECT_ENVIRONMENT=/opt/artemis/.venv \
     UV_CACHE_DIR=/tmp/uv-cache
 
-# adb is the agent's hands; git is only needed to fetch the pinned source.
+# adb is the agent's hands; git is only needed to fetch the pinned source. The
+# rest are the shared libraries OpenCV (imported at start-up) links against; the
+# slim base does not carry them.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends adb ca-certificates git \
+ && apt-get install -y --no-install-recommends \
+      adb ca-certificates git \
+      libgl1 libglib2.0-0 libxcb1 libsm6 libxext6 libxrender1 libxfixes3 libgomp1 \
  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
