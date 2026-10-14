@@ -169,7 +169,9 @@ async def _run(mission: str, session_id: str, ceiling: int) -> None:
             device_serial=os.environ.get("FUSION_DEVICE") or None,
             session_id=session_id,
             traces_output_path_str=str(TRACES),
-            output_description=REPORT_SCHEMA,
+            # No structured-output request: it makes the agent answer from the
+            # prompt instead of going to look, and the verdict comes back as the
+            # note the goal asks for anyway.
             profile="flash",
             video_recording_tools_enabled=False,
         )
