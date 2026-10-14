@@ -23,9 +23,13 @@ RUN apt-get update \
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
 
-# Never root. The user is created first and everything after it is built as that
-# user, so nothing is ever handed over with a chown pass over a 1.5 GB tree.
-RUN useradd --create-home --uid 1001 --shell /bin/sh tester \
+# Never root, and never a uid that exists on the host: a container's own files are
+# charged to its uid, so picking a uid that a host account already owns makes every
+# write count against that account's disk quota (which is how a lane run can fail
+# with "quota exceeded" on a host that has gigabytes free). The high uid below is
+# deliberately unassigned. Everything after this line is built as that user, so
+# nothing is handed over with a chown pass over a 1.5 GB tree.
+RUN useradd --create-home --uid 10001 --shell /bin/sh tester \
  && mkdir -p /opt/artemis /opt/lane /opt/patches \
  && chown tester:tester /opt/artemis /opt/lane
 
