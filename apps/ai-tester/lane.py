@@ -32,6 +32,11 @@ ARTEMIS = Path("/opt/artemis")
 OVERRIDES = Path("/opt/lane/artemis.overrides.jsonc")
 TRACES = Path("/tmp/lane-traces")
 
+# A copy of the run's own stream. The agent states its verdict through its status
+# call, which only ever goes to the stream — so the stream is where the verdict is
+# read from when no note was written.
+RUN_LOG = Path("/tmp/lane-run.log")
+
 # How often the running token total is checked against the budget.
 POLL_SECONDS = 5
 
@@ -64,6 +69,26 @@ REPORT_REMINDER = (
 
 def note(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
+
+
+class Tee:
+    """Writes to the real stream and to a file, so the run's words survive it."""
+
+    def __init__(self, stream, handle):
+        self._stream = stream
+        self._handle = handle
+
+    def write(self, data):
+        self._stream.write(data)
+        self._handle.write(data)
+        return len(data)
+
+    def flush(self):
+        self._stream.flush()
+        self._handle.flush()
+
+    def isatty(self):
+        return False
 
 
 def required(name: str) -> str:
@@ -295,8 +320,66 @@ def report_note() -> dict | None:
     if note_file is None:
         return None
 
-    text = note_file.read_text(encoding="utf-8", errors="replace")
+    return _as_report(note_file.read_text(encoding="utf-8", errors="replace"))
 
+
+def report_from_log() -> dict | None:
+    """The verdict the agent stated in its status call, read back out of the stream."""
+
+    if not RUN_LOG.is_file():
+        return None
+
+    text = RUN_LOG.read_text(encoding="utf-8", errors="replace")
+    marker = text.rfind('{"summary"')
+
+    while marker != -1:
+        end = _balanced_end(text, marker)
+
+        if end is not None:
+            report = _as_report(text[marker:end])
+
+            if report is not None and isinstance(report.get("goals"), list):
+                return report
+
+        # The same shape can appear in the prompt or an earlier attempt.
+        marker = text.rfind('{"summary"', 0, marker)
+
+    return None
+
+
+def _balanced_end(text: str, start: int) -> int | None:
+    """Index just past the object that opens at `start`, or None if it never closes."""
+
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for index in range(start, len(text)):
+        char = text[index]
+
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+
+            if depth == 0:
+                return index + 1
+
+    return None
+
+
+def _as_report(text: str) -> dict | None:
     for candidate in (text, _brace_slice(text)):
         if not candidate:
             continue
@@ -364,17 +447,23 @@ def main() -> int:
     failure = ""
     exhausted = False
 
-    try:
-        session_id = run(goal)
-    except BudgetExceeded as exc:
-        session_id = exc.session_id
-        exhausted = True
-    except Exception:  # noqa: BLE001 - the lane must always leave a verdict
-        failure = traceback.format_exc()
+    with RUN_LOG.open("w", encoding="utf-8") as handle:
+        real_out, real_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = Tee(real_out, handle), Tee(real_err, handle)
+
+        try:
+            session_id = run(goal)
+        except BudgetExceeded as exc:
+            session_id = exc.session_id
+            exhausted = True
+        except Exception:  # noqa: BLE001 - the lane must always leave a verdict
+            failure = traceback.format_exc()
+        finally:
+            sys.stdout, sys.stderr = real_out, real_err
 
     status = session_status(session_id) if session_id else ""
     tokens = usage(session_id) if session_id else {}
-    report = report_note() or {}
+    report = report_note() or report_from_log() or {}
     passed = status == "completed"
 
     summary = str(report.get("summary") or "").strip() or summary_fallback() or failure.strip()
