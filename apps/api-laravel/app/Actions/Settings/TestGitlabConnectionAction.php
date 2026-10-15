@@ -18,6 +18,7 @@ class TestGitlabConnectionAction
         private ?string $baseUrl = null,
         private ?string $token = null,
         private ?string $caCertificate = null,
+        private string $provider = GitlabConnectionData::PROVIDER_GITLAB,
         private ?string $testRepo = null,
         private ?int $actorUserId = null,
         private ?string $ip = null,
@@ -34,6 +35,7 @@ class TestGitlabConnectionAction
             ? trim($this->token)
             : ($stored?->token ?? '');
         $caCertificate = $this->caCertificate ?? $stored?->caCertificate;
+        $provider = $this->provider !== '' ? $this->provider : ($stored?->provider ?? GitlabConnectionData::PROVIDER_GITLAB);
 
         if ($baseUrl === '' || $token === '') {
             return [
@@ -43,7 +45,7 @@ class TestGitlabConnectionAction
             ];
         }
 
-        $connection = new GitlabConnectionData($baseUrl, $token, $caCertificate);
+        $connection = new GitlabConnectionData($baseUrl, $token, $caCertificate, $provider);
         $result = $this->client->verifyConnection($connection, $this->testRepo);
 
         // Only record the outcome when it describes the saved configuration.

@@ -6,7 +6,9 @@ use App\Actions\Settings\SaveGitlabConnectionAction;
 use App\Actions\Settings\TestGitlabConnectionAction;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\RequireSession;
+use App\Models\GitlabConnection;
 use App\Repositories\Settings\GitlabConnectionRepository;
+use App\Services\Gitlab\GitlabConnectionData;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -30,6 +32,7 @@ class GitlabSettingsController extends Controller
         return $this->legacyResponse([
             'configured' => true,
             'baseUrl' => $row->getBaseUrl(),
+            'provider' => (string) ($row->getProvider() ?: GitlabConnection::PROVIDER_GITLAB),
             'tokenHint' => $row->getTokenHint(),
             'hasCaCertificate' => $row->getCaCertificate() !== null,
             'lastVerifiedAt' => $row->getLastVerifiedAt()?->toIso8601String(),
@@ -44,12 +47,14 @@ class GitlabSettingsController extends Controller
             'baseUrl' => ['required', 'string', 'max:500'],
             'token' => ['sometimes', 'nullable', 'string', 'max:500'],
             'caCertificate' => ['sometimes', 'nullable', 'string', 'max:50000'],
+            'provider' => ['sometimes', 'nullable', 'in:gitlab,gitea'],
         ]);
 
         $result = run(new SaveGitlabConnectionAction(
             $validated['baseUrl'],
             $validated['token'] ?? null,
             $validated['caCertificate'] ?? null,
+            $validated['provider'] ?? GitlabConnectionData::PROVIDER_GITLAB,
             RequireSession::actorId($request),
             $request->ip()
         ));
@@ -64,6 +69,7 @@ class GitlabSettingsController extends Controller
         return $this->legacyResponse([
             'configured' => true,
             'baseUrl' => $result['baseUrl'],
+            'provider' => $result['provider'],
             'tokenHint' => $result['tokenHint'],
             'hasCaCertificate' => $result['hasCaCertificate'],
         ]);
@@ -75,6 +81,7 @@ class GitlabSettingsController extends Controller
             'baseUrl' => ['sometimes', 'nullable', 'string', 'max:500'],
             'token' => ['sometimes', 'nullable', 'string', 'max:500'],
             'caCertificate' => ['sometimes', 'nullable', 'string', 'max:50000'],
+            'provider' => ['sometimes', 'nullable', 'in:gitlab,gitea'],
             'testRepo' => ['sometimes', 'nullable', 'string', 'max:500'],
         ]);
 
@@ -82,6 +89,7 @@ class GitlabSettingsController extends Controller
             $validated['baseUrl'] ?? null,
             $validated['token'] ?? null,
             array_key_exists('caCertificate', $validated) ? $validated['caCertificate'] : null,
+            $validated['provider'] ?? GitlabConnectionData::PROVIDER_GITLAB,
             $validated['testRepo'] ?? null,
             RequireSession::actorId($request),
             $request->ip()

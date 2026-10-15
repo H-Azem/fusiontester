@@ -7,6 +7,7 @@ use App\Models\GitlabConnection;
 use App\Actions\Auth\WriteAuditAction;
 use App\Repositories\Settings\GitlabConnectionRepository;
 use App\Services\Gitlab\GitlabClient;
+use App\Services\Gitlab\GitlabConnectionData;
 
 /**
  * Saves the GitLab connection. An omitted token means "keep the stored one", so
@@ -18,6 +19,7 @@ class SaveGitlabConnectionAction
         private ?string $baseUrl,
         private ?string $token,
         private ?string $caCertificate,
+        private string $provider = GitlabConnectionData::PROVIDER_GITLAB,
         private ?int $actorUserId = null,
         private ?string $ip = null,
         private GitlabConnectionRepository $connections = new GitlabConnectionRepository,
@@ -43,7 +45,7 @@ class SaveGitlabConnectionAction
             ];
         }
 
-        $row = $this->connections->save($baseUrl, $token, $caCertificate);
+        $row = $this->connections->save($baseUrl, $token, $caCertificate, $this->provider);
 
         run(new WriteAuditAction(
             'gitlab.connection_saved',
@@ -52,6 +54,7 @@ class SaveGitlabConnectionAction
             null,
             [
                 'baseUrl' => $baseUrl,
+                'provider' => $this->provider,
                 'tokenChanged' => $token !== null && $token !== '',
                 'hasCaCertificate' => $caCertificate !== null,
             ]
@@ -61,6 +64,7 @@ class SaveGitlabConnectionAction
             'ok' => true,
             'configured' => true,
             'baseUrl' => $row->getBaseUrl(),
+            'provider' => (string) $row->getProvider(),
             'tokenHint' => $row->getTokenHint(),
             'hasCaCertificate' => $row->getCaCertificate() !== null,
         ];

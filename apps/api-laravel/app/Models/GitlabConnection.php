@@ -7,7 +7,7 @@ use App\Models\Contracts\BaseModelInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 
-#[Fillable([self::BASE_URL, self::TOKEN_CIPHERTEXT, self::TOKEN_HINT, self::CA_CERTIFICATE])]
+#[Fillable([self::BASE_URL, self::TOKEN_CIPHERTEXT, self::TOKEN_HINT, self::CA_CERTIFICATE, self::PROVIDER])]
 class GitlabConnection extends Model implements BaseModelInterface
 {
     use HasConstantGetters;
@@ -21,6 +21,13 @@ class GitlabConnection extends Model implements BaseModelInterface
     const TOKEN_HINT = 'token_hint';
 
     const CA_CERTIFICATE = 'ca_certificate';
+
+    /** Which forge this connection talks to; the API shape depends on it. */
+    const PROVIDER = 'provider';
+
+    const PROVIDER_GITLAB = 'gitlab';
+
+    const PROVIDER_GITEA = 'gitea';
 
     const LAST_VERIFIED_AT = 'last_verified_at';
 

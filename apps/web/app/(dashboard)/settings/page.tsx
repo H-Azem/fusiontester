@@ -13,6 +13,7 @@ import { StatusChip, relativeTime } from "@/components/status";
 type Config = {
   configured: boolean;
   baseUrl?: string;
+  provider?: string;
   tokenHint?: string;
   hasCaCertificate?: boolean;
   lastVerifiedAt?: string | null;
@@ -46,6 +47,7 @@ const REQUIRED_SCOPES = ["read_api", "read_repository"];
 
 function GitlabSettings() {
   const [config, setConfig] = useState<Config | null>(null);
+  const [provider, setProvider] = useState("gitlab");
   const [baseUrl, setBaseUrl] = useState("");
   const [token, setToken] = useState("");
   const [caCertificate, setCaCertificate] = useState("");
@@ -63,6 +65,7 @@ function GitlabSettings() {
     }
     const data = (await response.json()) as Config;
     setConfig(data);
+    setProvider(data.provider ?? "gitlab");
     setBaseUrl(data.baseUrl ?? "");
     setCaCertificate(data.hasCaCertificate ? "•••••••• (stored)" : "");
   }, []);
@@ -83,6 +86,7 @@ function GitlabSettings() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           baseUrl,
+          provider,
           token: token || undefined,
           caCertificate: caCertificate.startsWith("••••") ? undefined : caCertificate,
         }),
@@ -114,6 +118,7 @@ function GitlabSettings() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           baseUrl: baseUrl || undefined,
+          provider,
           token: token || undefined,
           caCertificate: caCertificate.startsWith("••••") ? undefined : caCertificate,
           testRepo: testRepo || undefined,
@@ -122,7 +127,7 @@ function GitlabSettings() {
 
       const data = (await response.json()) as VerifyResult & { message?: string };
       if (!response.ok) {
-        setError(data.message ?? "Could not reach GitLab.");
+        setError(data.message ?? `Could not reach ${provider === "gitea" ? "Gitea" : "GitLab"}.`);
         return;
       }
 
@@ -132,11 +137,13 @@ function GitlabSettings() {
     }
   }
 
+  const isGitea = provider === "gitea";
+
   return (
     <section className="panel">
       <div className="panel-head">
         <div>
-          <h2>GitLab connection</h2>
+          <h2>{isGitea ? "Gitea" : "GitLab"} connection</h2>
           <p className="panel-sub">Where the repositories under test are cloned from.</p>
         </div>
         <StatusChip
@@ -154,10 +161,34 @@ function GitlabSettings() {
       )}
 
       <form className="stack" onSubmit={handleSave}>
+        <div className="stack">
+          <span className="field-label">Forge</span>
+          <div className="chip-row" role="radiogroup" aria-label="Forge">
+            {[
+              { id: "gitlab", label: "GitLab" },
+              { id: "gitea", label: "Gitea" },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="radio"
+                aria-checked={provider === item.id}
+                className={provider === item.id ? "chip selected" : "chip"}
+                onClick={() => setProvider(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <span className="hint">
+            Which API this instance speaks — the paths and the auth header differ.
+          </span>
+        </div>
+
         <label className="field">
-          <span className="field-label">GitLab base URL</span>
+          <span className="field-label">{isGitea ? "Gitea" : "GitLab"} base URL</span>
           <input
-            placeholder="https://gitlab.example.com"
+            placeholder={isGitea ? "https://gitea.example.com" : "https://gitlab.example.com"}
             value={baseUrl}
             onChange={(event) => setBaseUrl(event.target.value)}
             required
@@ -174,7 +205,7 @@ function GitlabSettings() {
             onChange={(event) => setToken(event.target.value)}
           />
           <span className="hint">
-            Needs {REQUIRED_SCOPES.join(" + ")}
+            {isGitea ? "Needs the repo scope" : `Needs ${REQUIRED_SCOPES.join(" + ")}`}
             {config?.configured ? " · leave blank to keep the stored token" : ""}. The same
             token authenticates the private packages a build fetches.
           </span>
@@ -197,7 +228,9 @@ function GitlabSettings() {
             value={caCertificate}
             onChange={(event) => setCaCertificate(event.target.value)}
           />
-          <span className="hint">PEM, optional. Only needed for a self-signed GitLab.</span>
+          <span className="hint">
+            PEM, optional. Only needed for a self-signed {isGitea ? "Gitea" : "GitLab"}.
+          </span>
         </label>
 
         {error && (

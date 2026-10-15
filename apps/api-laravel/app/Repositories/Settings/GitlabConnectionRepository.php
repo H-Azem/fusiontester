@@ -30,12 +30,17 @@ class GitlabConnectionRepository
         return new GitlabConnectionData(
             (string) $row->getBaseUrl(),
             $this->box->decrypt((string) $row->getTokenCiphertext()),
-            $row->getCaCertificate()
+            $row->getCaCertificate(),
+            (string) ($row->getProvider() ?: GitlabConnectionData::PROVIDER_GITLAB),
         );
     }
 
-    public function save(string $baseUrl, ?string $token, ?string $caCertificate): GitlabConnection
-    {
+    public function save(
+        string $baseUrl,
+        ?string $token,
+        ?string $caCertificate,
+        string $provider = GitlabConnectionData::PROVIDER_GITLAB,
+    ): GitlabConnection {
         $current = $this->row();
 
         $tokenCiphertext = $token !== null && $token !== ''
@@ -53,6 +58,7 @@ class GitlabConnectionRepository
             GitlabConnection::TOKEN_CIPHERTEXT => $tokenCiphertext,
             GitlabConnection::TOKEN_HINT => $tokenHint,
             GitlabConnection::CA_CERTIFICATE => $caCertificate,
+            GitlabConnection::PROVIDER => $provider !== '' ? $provider : GitlabConnection::PROVIDER_GITLAB,
         ]);
     }
 
