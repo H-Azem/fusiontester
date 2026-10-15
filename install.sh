@@ -215,8 +215,17 @@ if [ "$WITH_DEVICE" = "1" ] && [ ! -d /root/android-sdk/platform-tools ]; then
 fi
 
 # ----------------------------------------------------------------------- app --
-say "Building and starting the app"
-docker compose -f docker-compose.yml up -d --build
+# The images are built by CI, so a deploy is a download. Building here is the
+# fallback: it is the same image, but it fetches Flutter, a JDK, Maestro and
+# Chromium first — several gigabytes and a long wait.
+say "Getting the application images"
+if docker compose -f docker-compose.yml pull --quiet; then
+  say "Starting the app"
+  docker compose -f docker-compose.yml up -d
+else
+  warn "Could not pull the published images; building them here instead (this takes a while)."
+  docker compose -f docker-compose.yml up -d --build
+fi
 
 # ------------------------------------------------------------------ ai lane --
 say "Installing the AI lane"

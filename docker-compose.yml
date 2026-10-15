@@ -16,6 +16,9 @@
 
 services:
   api:
+    # Published by CI, so a server deploys by pulling. `build` stays for a local
+    # `--build`, and it produces the same tag.
+    image: ${FUSION_API_IMAGE:-ghcr.io/h-azem/tester-api:latest}
     build:
       context: .
       dockerfile: apps/api-laravel/Dockerfile
@@ -80,6 +83,7 @@ services:
       start_period: 120s
 
   web:
+    image: ${FUSION_WEB_IMAGE:-ghcr.io/h-azem/tester-web:latest}
     build:
       context: .
       dockerfile: apps/web/Dockerfile
