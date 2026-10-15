@@ -1,0 +1,9 @@
+[Unit]
+Description=Keep the redroid device running and reachable
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/fusion/fusion.env
+ExecStart=/usr/local/bin/fusion-device-watchdog.sh

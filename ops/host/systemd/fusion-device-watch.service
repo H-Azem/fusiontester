@@ -1,0 +1,14 @@
+[Unit]
+Description=Pause or resume the Android container for Fusion Tester runs
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/fusion/fusion.env
+ExecStart=/usr/local/bin/fusion-device-watch.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

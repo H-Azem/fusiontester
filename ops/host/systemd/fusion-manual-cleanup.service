@@ -1,0 +1,9 @@
+[Unit]
+Description=Uninstall manual-test apps left on the emulator
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/fusion/fusion.env
+ExecStart=/usr/local/bin/fusion-manual-cleanup.sh

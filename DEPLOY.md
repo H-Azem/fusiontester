@@ -1,5 +1,29 @@
 # Deploying Fusion Tester on Ubuntu
 
+## The one-line install
+
+On an Ubuntu host that already has systemd (it does **not** have to be empty):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/H-Azem/fusiontester/main/install.sh | sudo sh
+```
+
+It takes its own port, keeps everything under `/opt/fusiontester` and
+`/etc/fusion`, and never touches another service, so it is safe next to an
+existing stack. It installs Docker if the host has none, brings up the app from
+self-contained images (Flutter, a JDK, Maestro and Chromium live inside them),
+pulls the AI lane image and installs the host runner, and — if asked — brings up
+the Android device and puts the dashboard behind nginx with a certificate.
+Running it again updates in place.
+
+```bash
+sudo sh install.sh --help              # every option
+sudo sh install.sh --no-device         # web lane only, no kernel requirements
+sudo sh install.sh --domain tester.example.com
+```
+
+## The longer way
+
 Two containers and one public port. The API image carries every tool a run
 shells out to — Flutter, a JDK, Maestro, Chromium and git — so the server needs
 nothing pre-installed beyond Docker.

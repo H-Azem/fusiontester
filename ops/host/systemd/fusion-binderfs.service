@@ -1,0 +1,13 @@
+[Unit]
+Description=Prepare binderfs for the Fusion Tester Android container
+DefaultDependencies=no
+After=systemd-modules-load.service
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/fusion-binderfs.sh
+
+[Install]
+WantedBy=multi-user.target

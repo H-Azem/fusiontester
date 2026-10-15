@@ -1,0 +1,32 @@
+# The Android device the pipeline drives.
+#
+# redroid is a full Android in a container. It needs binderfs prepared on the host
+# before Docker starts (fusion-binderfs.service does that) and privileged mode.
+#
+# adb is published on the docker bridge gateway as well as loopback, so the API
+# container reaches the device exactly like any other service. The host port is
+# configurable because a shared server may already be using 5555.
+#
+# Started by install.sh with:
+#   docker compose -f ops/host/redroid.yml up -d
+services:
+  device:
+    image: redroid/redroid:13.0.0_64only-latest
+    container_name: ${FUSION_DEVICE_CONTAINER:-redroid-tester}
+    privileged: true
+    restart: "no"
+    mem_limit: ${FUSION_DEVICE_MEMORY:-2560m}
+    command:
+      - androidboot.redroid_width=${FUSION_DEVICE_WIDTH:-1080}
+      - androidboot.redroid_height=${FUSION_DEVICE_HEIGHT:-1920}
+      - androidboot.redroid_dpi=${FUSION_DEVICE_DPI:-320}
+      - androidboot.use_memfd=true
+      - androidboot.redroid_gpu_mode=guest
+    volumes:
+      - redroid-data:/data
+    ports:
+      - "127.0.0.1:${FUSION_DEVICE_PORT:-5555}:5555"
+      - "${FUSION_DEVICE_BIND:-172.17.0.1}:${FUSION_DEVICE_PORT:-5555}:5555"
+
+volumes:
+  redroid-data:
