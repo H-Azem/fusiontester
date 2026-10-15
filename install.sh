@@ -184,6 +184,25 @@ if [ -z "$ADMIN_PASSWORD" ]; then
 fi
 
 # ------------------------------------------------------------------------ code --
+# Space is checked before anything is downloaded. The images alone are ~9GB (the
+# api one carries Flutter, a JDK, Maestro and Chromium), the Android SDK is ~3GB,
+# the device ~2.3GB, and a build leaves its workspace behind — a small VM runs out
+# halfway through, which is the worst moment to find out.
+AVAILABLE_GB="$(df -Pk / | awk 'NR==2 { printf "%d", $4 / 1048576 }')"
+NEEDED_GB=18
+[ "$WITH_DEVICE" = "1" ] && NEEDED_GB=25
+
+say "Free space on /: ${AVAILABLE_GB}GB (about ${NEEDED_GB}GB is needed)"
+
+if [ "$AVAILABLE_GB" -lt "$NEEDED_GB" ]; then
+  warn "This host is tight: ${AVAILABLE_GB}GB free, and the images, the toolchains and a"
+  warn "build workspace want roughly ${NEEDED_GB}GB. A pull can die halfway with ENOSPC."
+
+  if ! confirm "Continue anyway?" n; then
+    die "Stopped. Grow the disk (or free space) and run this again."
+  fi
+fi
+
 say "Fetching the project into $INSTALL_DIR"
 
 if [ -d "$INSTALL_DIR/.git" ]; then
