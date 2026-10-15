@@ -184,9 +184,11 @@ Two things are irreplaceable:
    screenshots and artifacts.
 
 ```bash
-docker run --rm -v fusiontester_api-data:/data -v "$PWD:/backup" alpine \
+docker run --rm -v tester_api-data:/data -v "$PWD:/backup" alpine \
   tar czf /backup/api-data.tgz -C /data .
 ```
+
+Do this before `uninstall.sh --purge`: that is the volume it deletes.
 
 ## Disk growth
 
