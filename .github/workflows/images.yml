@@ -1,0 +1,76 @@
+name: images
+
+# Builds the two application images and publishes them, so a server deploys by
+# pulling rather than by building. The api image is self-contained — Flutter, a
+# JDK, Maestro and Chromium are inside it — which is exactly why building it
+# belongs on a runner and not on the machine that has to stay up.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api-laravel/**'
+      - 'apps/web/**'
+      - 'apps/runner/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/images.yml'
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api-laravel/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/h-azem/tester-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+  web:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          platforms: linux/amd64
+          push: true
+          # The API URL is compiled into the dashboard, so it is an argument to the
+          # build rather than something set at run time.
+          build-args: |
+            API_URL=http://api:4000
+          tags: ghcr.io/h-azem/tester-web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
