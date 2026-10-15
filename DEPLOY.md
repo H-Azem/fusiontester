@@ -1,271 +1,305 @@
-# Deploying Fusion Tester on Ubuntu
+# Fusion Tester — install and operations
 
-## The one-line install
+This is the hand-over document: everything needed to put the platform on a server, hand
+it to a team, and keep it alive afterwards. It describes the installer that lives in this
+repository, which is the supported path — the manual route is kept at the end for
+reference only.
 
-On an Ubuntu host that already has systemd (it does **not** have to be empty):
+## What it is
+
+A Laravel API and a Next.js dashboard, plus an Android device that the API drives over
+adb. A *run* clones a Flutter app, builds it, and tests it in one of two lanes:
+
+- the **Maestro lane** — deterministic flows from the app's own `.maestro/flows`;
+- the **web lane** — an Android app is built for web and driven in a browser.
+
+A run produces steps, screenshots, artifacts and a report; failures and reports can go to
+Telegram. The AI test lane (below) drives the device itself when a run asks for it.
+
+## What runs where
+
+```
+internet -> nginx (TLS) -> web:1999 -> api:4000 (internal, never published)
+                                          |
+                                          +-> redroid (Android 13) at 172.17.0.1:5555
+```
+
+| Container | Image | Published | Notes |
+| --- | --- | --- | --- |
+| `tester-api-1` | `ghcr.io/h-azem/tester-api` | no | Laravel + the test pipeline (Flutter, a JDK, Maestro, Chromium are inside) |
+| `tester-web-1` | `ghcr.io/h-azem/tester-web` | yes, `1999` | Next.js dashboard |
+| `redroid-tester` | `redroid/redroid:13.0.0_64only-latest` | `5555` on the bridge | the Android device |
+
+The images are built by GitHub Actions and published to ghcr.io, so a server deploy is a
+download. Flutter, the JDK, Maestro and Chromium are **inside the api image** — nothing
+for a build is installed on the host.
+
+## What the server needs
+
+| | |
+| --- | --- |
+| OS | Ubuntu 22.04 or 24.04, systemd |
+| CPU | 4 cores |
+| RAM | 6–8 GB, plus 2–4 GB of swap (dart2js can spike on a large app) |
+| Disk | **50 GB** — images ~12 GB, Android SDK ~3 GB, device ~2.3 GB, and every run leaves a 1.6 GB workspace |
+| Kernel | `binderfs` for the Android device — a **KVM** VPS. On OpenVZ the device cannot run |
+| Domain | only for HTTPS |
+
+The queue runs one test at a time, which is why 4 cores is enough. Disk is the constraint
+that bites first. The installer reads free space before downloading anything and asks
+before continuing on a host that is too tight.
+
+## Install
+
+```bash
+git clone --depth 1 https://github.com/H-Azem/fusiontester.git /opt/fusiontester
+cd /opt/fusiontester
+sudo sh install.sh
+```
+
+The same installer works piped, which is shorter but needs the network to serve the file
+rather than a cached copy:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/H-Azem/fusiontester/main/install.sh | sudo sh
 ```
 
-It takes its own port, keeps everything under `/opt/fusiontester` and
-`/etc/fusion`, and never touches another service, so it is safe next to an
-existing stack. It installs Docker if the host has none, brings up the app from
-self-contained images (Flutter, a JDK, Maestro and Chromium live inside them),
-pulls the AI lane image and installs the host runner, and — if asked — brings up
-the Android device and puts the dashboard behind nginx with a certificate.
-Running it again updates in place.
+Answers, in order:
+
+| Question | Answer |
+| --- | --- |
+| Set up the Android device lane? | **y** (needs `binderfs`), or n for a web-only host |
+| Put it behind nginx with a TLS certificate? | **y** and a domain, or **n** |
+| *(if no TLS)* Expose the dashboard directly on the public interface? | **y** to reach it from outside, or **n** to keep it loopback-only |
+| Host port for the dashboard | Enter (1999; if taken, the next free port) |
+| Host port for the device's adb | Enter (5555) |
+
+Skip the questions entirely with flags:
 
 ```bash
-sudo sh install.sh --help              # every option
-sudo sh install.sh --no-device         # web lane only, no kernel requirements
+sudo sh install.sh --help                    # every option
+sudo sh install.sh --yes                     # take every default
+sudo sh install.sh --no-device               # web lane only, no kernel requirements
 sudo sh install.sh --domain tester.example.com
+sudo sh install.sh --web-port 4999 --device-port 5555
 ```
 
-## Removing it again
+What it did, once it finishes:
+
+- installed Docker if the host had none (`git`, `curl`, `ss`, `openssl`, `unzip` and a
+  headless JRE are ensured too — the Android SDK manager is a Java program);
+- put the checkout in `/opt/fusiontester` (change with `--dir`);
+- wrote `.env` there (mode 600) with a fresh `APP_KEY` and a generated admin password;
+- pulled the application images and started them;
+- pulled the AI lane image and installed `fusion-ai-lane.service`;
+- installed the Android SDK into `/root/android-sdk` (with `adb` on the PATH);
+- brought up the device and the watcher units, if asked;
+- set up nginx and a certificate, if asked.
+
+It never assumes an empty server: it takes its own port, writes under `/opt/fusiontester`
+and `/etc/fusion`, and leaves other services alone. Running it again updates in place.
+
+**The dashboard listens on `127.0.0.1` by default**, because it expects a proxy in front of
+it. A host with neither a proxy nor `FUSION_WEB_BIND=0.0.0.0` answers nothing from outside
+— from inside the host the page loads and from outside it does not. The installer's closing
+message says which of the two you got.
+
+## First sign-in
+
+Open the dashboard (the URL the installer printed) and sign in as **`fusion`** with the
+password it printed. Change that password, then fill in Settings (which sit behind a second
+password):
+
+- **GitLab or Gitea** + a token — the same token clones the repository and authenticates
+  private `git:` pub dependencies. It needs `read_api` + `read_repository`; avoid `api`.
+- **AI model** — base URL, model name and key, plus the token budget for the AI lane
+  (default 10,000,000, editable in the settings card).
+- **Telegram** — bot token, chat and optional topic, if reports should go to a channel.
+- **Flutter** — the settings card can move the SDK in the image to a volume and upgrade it
+  to the latest stable, without rebuilding the image. It refuses while a run is in flight,
+  and can restore the previous SDK.
+
+## Day to day
 
 ```bash
-sudo sh uninstall.sh            # stops and removes everything, keeps the data
-sudo sh uninstall.sh --purge    # also deletes the database and the workspaces
+cd /opt/fusiontester
+
+docker compose ps                       # what is up
+docker compose logs -f api              # the pipeline and the API
+docker compose logs -f web              # the dashboard
+docker compose restart api              # after a settings change that needs it
+docker compose down && docker compose up -d
+
+systemctl status fusion-ai-lane         # runs the lane's container when a run asks for it
+systemctl status fusion-device-watch    # keeps the device alive between runs
+cat /srv/fusion-control/ai-lane.log     # one line per lane start and finish
+cat /srv/fusion-control/device.log      # what the device watcher is doing
+
+docker exec tester-api-1 /root/android-sdk/platform-tools/adb devices
 ```
 
-The default is conservative on purpose: the containers, units, scripts and the
-checkout go, but the volumes stay, so a reinstall picks up where the old one left
-off. Docker itself and the Android SDK are only touched when asked
-(`--remove-docker`, `--remove-sdk`), because another stack may be using them.
+Files and units it owns:
+
+| Path | What |
+| --- | --- |
+| `/opt/fusiontester` | the checkout and `.env` |
+| `/etc/fusion/fusion.env` | the device's addresses (mode 600) |
+| `/srv/fusion-control` | pause/resume flags and `device.log` |
+| `/root/android-sdk` | the Android SDK (`adb` linked into `/usr/local/bin`) |
+| `/usr/local/bin/fusion-*.sh` | the host-side helper scripts |
+| `fusion-binderfs`, `fusion-device-watch` | services |
+| `fusion-device-watchdog`, `fusion-manual-cleanup` | timers |
+| `fusion-ai-lane` | service that runs the AI lane on request |
+
+`.env` keys, all written by the installer: `COMPOSE_PROJECT_NAME`, `APP_KEY`,
+`WEB_ORIGIN`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `WEB_PORT`, `FUSION_WEB_BIND`,
+`ANDROID_DEVICE`, `ANDROID_SDK_PATH`, `FUSION_CONTROL_PATH`.
+
+**`APP_KEY` is the one value you cannot lose.** It encrypts the stored forge and AI tokens;
+without it they must be re-entered.
 
 ## Updating
 
-Push to `main`; CI builds the images; on the server:
+Push to `main`; CI builds and publishes new images. On the server:
 
 ```bash
-cd /opt/fusiontester && sudo sh install.sh      # or: git pull && docker compose pull && docker compose up -d
+cd /opt/fusiontester && sudo sh install.sh          # fetches, pulls, restarts
 ```
 
-The database and the workspaces live in volumes, so an update never starts from
-scratch.
+or by hand:
 
-## The longer way
-
-Two containers and one public port. The API image carries every tool a run
-shells out to — Flutter, a JDK, Maestro, Chromium and git — so the server needs
-nothing pre-installed beyond Docker.
-
-```
-internet -> nginx (TLS) -> web:1999 -> api:4000 (internal, never published)
+```bash
+cd /opt/fusiontester
+git pull
+docker compose pull
+docker compose up -d
 ```
 
-## What the server needs
+The database and the workspaces live in volumes, so an update never starts from scratch.
+To hold a server on a known-good build, pin the tag in `.env` instead of tracking `latest`:
 
-Measured against a real Flutter app, not estimated:
+```bash
+FUSION_API_IMAGE=ghcr.io/h-azem/tester-api:sha-abc1234
+FUSION_WEB_IMAGE=ghcr.io/h-azem/tester-web:sha-abc1234
+```
 
-| Stage | Cost |
+## The Android device
+
+`redroid` needs `binderfs`, which a reboot takes away. Without it the container exits the
+moment it starts, and a run reports "the device did not come back after the build" rather
+than anything about binderfs. Both ends are handled:
+
+- `fusion-binderfs.service` mounts `/dev/binderfs` before Docker starts, and the device
+  watcher mounts it again before every resume;
+- the device is stopped deliberately while a build runs and brought back afterwards — the
+  pause/resume flags in `/srv/fusion-control` are how the container asks for that without
+  ever holding a Docker socket.
+
+To check by hand:
+
+```bash
+systemctl is-active fusion-binderfs fusion-device-watch
+docker ps --filter name=redroid            # Up, or stopped deliberately between runs
+docker exec tester-api-1 /root/android-sdk/platform-tools/adb devices   # 172.17.0.1:5555 device
+```
+
+## Backup and restore
+
+Two things are irreplaceable:
+
+1. **`.env`** — `APP_KEY` in particular.
+2. **The `tester_api-data` volume** — the database, every run's screenshots and artifacts.
+
+```bash
+cd /opt/fusiontester
+tar czf fusion-env-$(date +%F).tgz .env
+
+docker run --rm -v tester_api-data:/data -v "$PWD:/backup" alpine \
+  tar czf /backup/api-data-$(date +%F).tgz -C /data .
+```
+
+Restore is the reverse: unpack `.env` into the checkout, then
+
+```bash
+docker run --rm -v tester_api-data:/data -v "$PWD:/backup" alpine \
+  sh -c 'rm -rf /data/* && tar xzf /backup/api-data-YYYY-MM-DD.tgz -C /data'
+docker compose up -d
+```
+
+Do this **before** `uninstall.sh --purge`: that is the volume it deletes. The other volumes
+(Flutter SDK, pub cache, Maestro home) are rebuildable downloads and need no backup.
+
+## Disk growth
+
+Every run leaves its full clone behind — **1.66 GB each** — and nothing deletes them
+automatically. Ten runs is ~17 GB.
+
+```bash
+docker compose exec api du -sh /app/apps/api-laravel/storage/app/fusion
+
+# Delete workspaces older than 7 days. Those runs keep their database rows, but
+# their screenshots and artifacts go with the files.
+docker compose run --rm api sh -c \
+  'find /app/apps/api-laravel/storage/app/fusion -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +'
+```
+
+Run that from cron on a server that sees regular use. The `fusion-manual-cleanup.timer`
+does the same for the device side.
+
+## Removing it
+
+```bash
+sudo sh /opt/fusiontester/uninstall.sh              # everything, data kept
+sudo sh /opt/fusiontester/uninstall.sh --purge      # data deleted too
+```
+
+The default is deliberately conservative: containers, units, scripts and the checkout go,
+the volumes stay, so a reinstall picks up where the old one left off. Docker and the
+Android SDK are only removed when asked (`--remove-docker`, `--remove-sdk`,
+`--remove-nginx`), because another stack may be using them.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
 | --- | --- |
-| `flutter build web` | ~0.9 GB peak RAM, 49 MB output |
-| Per-run workspace on disk | **1.66 GB** (source + `.git` + build) |
-| Toolchain in the image | Flutter 3 GB, pub cache 1.6 GB |
+| Page loads on the server, `503` or nothing from outside | The dashboard is bound to `127.0.0.1`. Set `FUSION_WEB_BIND=0.0.0.0` in `.env` and `docker compose up -d`, or install nginx (`--domain <name>`) |
+| `invalid hostPort: …` when starting | `.env` holds something that is not a number as `WEB_PORT`. `grep '^WEB_PORT' .env` and correct it |
+| api restarts: `The environment file is invalid! Failed to parse dotenv file` | A value in `.env` spans a line or contains quotes/spaces — usually `WEB_ORIGIN`. Correct it and `docker compose up -d` |
+| A pull dies: `no space left on device` | Disk. `df -h /` and `docker system df`; grow the disk or free space |
+| The Android SDK step fails | It needs a JVM and `unzip`; the installer now installs both. Anything else: re-run `sudo sh install.sh` |
+| Login succeeds, then returns to sign-in | `WEB_ORIGIN` does not match the public URL exactly (scheme and host) |
+| Device container exits immediately | `binderfs`: `systemctl status fusion-binderfs`, `cat /srv/fusion-control/device.log`. On OpenVZ it cannot work at all |
+| Run fails at *Getting packages* | Private `git:` pub dependencies — the token in Settings must be able to read them |
+| OOM-killed mid-build | Raise `mem_limit` for `api` and check that swap exists |
+| The AI lane does not run | The image must be present (`docker images | grep tester-ai-tester`) and the model endpoint in Settings must answer |
 
-A 4-core / 6 GB server is enough, because the queue runs **one test at a time**.
-Disk is the constraint that bites first — budget **40 GB** and see *Disk growth*
-below. Add 2–4 GB of swap: dart2js can spike on a large app, and swapping beats
-being OOM-killed.
+## The manual route (reference)
 
-## 1. Install Docker
-
-```bash
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker "$USER"   # log out and back in
-docker compose version
-```
-
-## 2. Get the code and configure
-
-```bash
-git clone https://github.com/H-Azem/fusiontester.git
-cd fusiontester
-cp .env.example .env
-```
-
-Edit `.env`:
-
-- **`WEB_ORIGIN`** — the public URL, exactly (`https://tester.example.com`).
-  Login origin checks compare against it; a mismatch shows up as a login that
-  succeeds and then bounces straight back to the sign-in page.
-- **`APP_SECRET`** — generate with `openssl rand -base64 48`. Losing or changing
-  it makes every stored GitLab token unreadable.
-- **GitLab token** — set it in the dashboard (Settings → GitLab) rather than in
-  `.env`: the same token clones the repository and authenticates the private `git:`
-  pub packages a run fetches. A token with `read_repository` is enough; without it
-  such a run fails at *Getting packages*.
-
-## 3. Build and start
+Without the installer: Docker, `git clone`, then a `.env` with `APP_KEY`, `WEB_ORIGIN`,
+`ADMIN_USERNAME=fusion` and `ADMIN_PASSWORD`, then
 
 ```bash
 docker compose up -d --build
 docker compose logs -f api
 ```
 
-The first build downloads Flutter and Maestro, so it takes a while. Wait for:
+Wait for `API listening on http://0.0.0.0:4000`. The first build downloads Flutter and
+Maestro, so it takes a long time; that is what the published images exist to avoid.
 
-```
-git: authenticated to <host> for private pub dependencies
-API listening on http://0.0.0.0:4000
-```
-
-## 4. First login
-
-Open the site and sign in with `admin` / `admin`, then **change the password
-immediately** from the Account page. The dashboard is reachable from the
-internet, and the default is public knowledge.
-
-## 5. Connect GitLab
-
-Settings → GitLab. The token needs **`read_api` + `read_repository`**:
-
-- `read_api` alone lists projects but cannot read repository contents.
-- `read_repository` alone cannot list projects (`403 insufficient_scope`).
-- Avoid `api` — it grants write access you do not need.
-
-Test the connection before relying on it. The API is reachable only from inside
-the compose network, so use the dashboard rather than curling port 4000.
-
-## 6. Put it behind nginx
-
-The compose file binds the dashboard to `127.0.0.1:1999`, so it is not publicly
-reachable until the proxy is configured.
-
-```nginx
-server {
-    listen 80;
-    server_name tester.example.com;
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    server_name tester.example.com;
-
-    ssl_certificate     /etc/letsencrypt/live/tester.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/tester.example.com/privkey.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:1999;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        # Required: the API runs with TRUST_PROXY=true and reads this header to
-        # apply per-IP login blocks. Without it everyone shares one bucket.
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-```
+The AI lane is deliberately outside compose — the API has no Docker socket — so it needs
+its own image and unit. The API drops a request under `/srv/fusion-control/ai/<runId>/`
+and the runner, a small daemon, claims it and runs the container exactly once with
+`--cap-drop ALL` and `--security-opt no-new-privileges`. It is bounded by
+`FUSION_AI_TIMEOUT` (3600 seconds) and by the token budget in Settings.
 
 ```bash
-sudo certbot --nginx -d tester.example.com
+sudo apps/ai-tester/build.sh     # build, install the runner, restart the unit
 ```
 
-## Updating
+The agent inside is **pinned by commit** in its Dockerfile: an upstream release cannot
+change how a lane behaves mid-flight. Its image is large (a Python environment with vision
+libraries); check `docker system df` before building it locally.
 
-```bash
-git pull
-docker compose up -d --build
-```
-
-Dependencies are cached in named volumes, so rebuilds after a code change are
-much faster than the first one.
-
-## Backups
-
-Two things are irreplaceable:
-
-1. **`.env`** — without `APP_SECRET`, the stored GitLab token cannot be
-   decrypted and must be re-entered.
-2. **The `api-data` volume** — the embedded database plus every run's
-   screenshots and artifacts.
-
-```bash
-docker run --rm -v tester_api-data:/data -v "$PWD:/backup" alpine \
-  tar czf /backup/api-data.tgz -C /data .
-```
-
-Do this before `uninstall.sh --purge`: that is the volume it deletes.
-
-## Disk growth
-
-Every run leaves its full clone behind — **1.66 GB each** — and nothing deletes
-them automatically. Ten runs is ~17 GB.
-
-```bash
-# How much is in use
-docker compose exec api du -sh /app/apps/api/.data/runs
-
-# Delete workspaces older than 7 days (frees the space; those runs keep their
-# database rows, but their screenshots and artifacts are gone)
-docker compose run --rm api sh -c \
-  'find /app/apps/api/.data/runs -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +'
-```
-
-Run that from cron if the server sees regular use.
-
-## Troubleshooting
-
-| Symptom | Cause |
-| --- | --- |
-| Login succeeds, then returns to sign-in | `WEB_ORIGIN` does not match the public URL exactly |
-| Run fails at *Getting packages* | Private `git:` pub dependencies — the GitLab token in Settings is used; make sure it can read them |
-| `403 insufficient_scope` listing projects | Token is missing `read_api` |
-| Everyone is blocked at once after failed logins | NAT: one office IP is shared, and blocks are per IP |
-| Container exits repeatedly | `docker compose logs api` — usually `APP_SECRET` unset |
-| Runs fail at *Opening in a browser* | Chromium missing; check `CHROME_PATH=/usr/bin/chromium` |
-| OOM-killed mid-build | Raise `mem_limit` and check that swap exists |
-
-## Notes
-
-- The API port is deliberately unpublished. Reach it through the dashboard.
-- `init: true` reaps the git/Flutter/Chromium children a run spawns, so a
-  restart cannot leave a build running in the background.
-- `PGLITE_DIR` points at the mounted volume, so the database survives rebuilds.
-
-## After a host reboot: the Android device
-
-`redroid` needs `binderfs`, which a reboot takes away, and without it the container
-exits the moment it starts — which the run reports as "the device did not come back
-after the build" rather than as anything about binderfs.
-
-Both ends are handled now:
-
-- `fusion-binderfs.service` mounts `/dev/binderfs` before Docker starts (enabled).
-- The device watcher mounts it again before every resume, and says so in
-  `/srv/fusion-control/device.log` when the container exits at once anyway.
-
-To check by hand:
-
-```bash
-systemctl is-active fusion-binderfs fusion-device-watch
-docker ps --filter name=redroid           # should be Up, or stopped deliberately between runs
-docker exec tester-api-1 /root/android-sdk/platform-tools/adb devices   # 172.17.0.1:5555 device
-```
-
-## The AI lane container
-
-The AI lane runs **outside** compose. `apps/ai-tester` builds an image and
-`fusion-ai-lane.service` runs it on request, because the API deliberately has no
-Docker socket.
-
-```bash
-sudo apps/ai-tester/build.sh          # build tester-ai-tester, install the runner, restart the unit
-```
-
-- The agent inside is **pinned by commit** in the Dockerfile. A surprise upstream
-  release cannot change how a lane behaves mid-flight; rebuilding is deliberate.
-- The image is large (a Python environment with vision libraries, ~2 GB). Build it
-  when the disk has room — `docker system df` first, and `docker builder prune` if
-  the build cache has grown.
-- The first task on a device installs a small **accessibility helper**, which shows
-  as a collapsed "test helper is running" notification. It is benign and stays
-  between runs; remove it with `artemis helper uninstall` inside the image if a
-  device should be left untouched.
-- The lane reaches the model endpoint named in Settings and the device at
-  `172.17.0.1:5555`; nothing else. It is run with `--cap-drop ALL`,
-  `--security-opt no-new-privileges`, as a non-root user, with only `/work`
-  mounted.
+If the host already has a Flutter/JDK/Maestro toolchain, `docker-compose.host-tools.yml`
+mounts it instead of using the self-contained image — a ~6 GB saving on a machine that is
+already set up for Flutter development.
