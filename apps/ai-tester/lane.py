@@ -380,7 +380,9 @@ def _balanced_end(text: str, start: int) -> int | None:
 
 
 def _as_report(text: str) -> dict | None:
-    for candidate in (text, _brace_slice(text)):
+    # The verdict travels inside a Python repr, so an apostrophe in it arrives
+    # escaped as \' — valid in the repr, invalid in JSON. Try it both ways.
+    for candidate in (text, _brace_slice(text), text.replace("\\'", "'"), _brace_slice(text).replace("\\'", "'")):
         if not candidate:
             continue
 
