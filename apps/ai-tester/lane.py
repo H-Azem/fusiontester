@@ -95,6 +95,10 @@ def configure_endpoint() -> None:
     # path does, and a run may also drive the same device with Maestro flows.
     os.environ["ARTEMIS_HIERARCHY_BACKEND"] = "auto"
     os.environ["ARTEMIS_KEEP_DEVICE_AWAKE"] = "false"
+    # A node whose reply will not parse makes the agent pause for a resume signal;
+    # the default waits a quarter of an hour. Fail the run instead of holding the
+    # device and the budget hostage.
+    os.environ["LLM_PAUSE_TIMEOUT_SECONDS"] = os.environ.get("FUSION_LLM_PAUSE_SECONDS", "120")
 
     write_config(model)
 

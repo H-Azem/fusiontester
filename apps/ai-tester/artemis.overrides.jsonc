@@ -14,23 +14,28 @@
     }
   },
   "nodes": {
-    // These two would otherwise pin a Gemini Robotics model the endpoint does
-    // not serve; with the explorer on the "pro" tier below they are not used for
-    // grounding anyway, but they must not fail validation either.
+    // The utility nodes pin their own model instead of following the run's.
+    //
+    // Both ask for strict JSON, and the run's endpoint is often a router alias
+    // that resolves to whatever is available: when it hands back prose, the
+    // node's reply fails to parse and the whole run pauses waiting for a resume
+    // signal. Naming the model trades "whatever the operator configured" for a
+    // reply the lane can actually read — the operator's model still drives the
+    // planner and the operator itself, which is what the agent's reasoning is.
     "object_detector": {
       "provider": "openai",
-      "model": "@@MODEL@@",
+      "model": "gemini/gemini-3.8-flash",
       "fallback": {
         "provider": "openai",
-        "model": "@@MODEL@@"
+        "model": "gemini/gemini-3.5-flash-lite"
       }
     },
     "hopper": {
       "provider": "openai",
-      "model": "@@MODEL@@",
+      "model": "gemini/gemini-3.5-flash-lite",
       "fallback": {
         "provider": "openai",
-        "model": "@@MODEL@@"
+        "model": "gemini/gemini-3.8-flash"
       }
     }
   },
@@ -52,7 +57,9 @@
     },
     "memory": {
       "chunking": {
-        "model": "@@MODEL@@"
+        // Compresses history into JSON capsules, so it has the same need as the
+        // utility nodes above.
+        "model": "gemini/gemini-3.5-flash-lite"
       }
     },
     "video_analyzer": {
