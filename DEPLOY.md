@@ -22,6 +22,29 @@ sudo sh install.sh --no-device         # web lane only, no kernel requirements
 sudo sh install.sh --domain tester.example.com
 ```
 
+## Removing it again
+
+```bash
+sudo sh uninstall.sh            # stops and removes everything, keeps the data
+sudo sh uninstall.sh --purge    # also deletes the database and the workspaces
+```
+
+The default is conservative on purpose: the containers, units, scripts and the
+checkout go, but the volumes stay, so a reinstall picks up where the old one left
+off. Docker itself and the Android SDK are only touched when asked
+(`--remove-docker`, `--remove-sdk`), because another stack may be using them.
+
+## Updating
+
+Push to `main`; CI builds the images; on the server:
+
+```bash
+cd /opt/fusiontester && sudo sh install.sh      # or: git pull && docker compose pull && docker compose up -d
+```
+
+The database and the workspaces live in volumes, so an update never starts from
+scratch.
+
 ## The longer way
 
 Two containers and one public port. The API image carries every tool a run
