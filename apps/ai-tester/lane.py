@@ -402,6 +402,40 @@ def _brace_slice(text: str) -> str:
     return text[start : end + 1] if start != -1 and end > start else ""
 
 
+def explanation_from_log() -> str:
+    """The agent's closing words when it reported in prose instead of JSON.
+
+    Its status call states the outcome plainly, and the stream keeps verbatim
+    what it said — which is a better summary than any generic sentence here.
+    """
+
+    if not RUN_LOG.is_file():
+        return ""
+
+    text = RUN_LOG.read_text(encoding="utf-8", errors="replace")
+    marker = text.rfind("'explanation': '")
+
+    if marker == -1:
+        return ""
+
+    start = marker + len("'explanation': '")
+    end = text.find("'})", start)
+
+    if end == -1:
+        end = text.find("\n", start)
+
+    if end == -1:
+        return ""
+
+    return (
+        text[start:end]
+        .replace("\\r\\n", "\n")
+        .replace("\\n", "\n")
+        .replace("\\'", "'")
+        .strip()
+    )
+
+
 def summary_fallback() -> str:
     note_file = newest("**/notes/output.md")
 
@@ -466,7 +500,12 @@ def main() -> int:
     report = report_note() or report_from_log() or {}
     passed = status == "completed"
 
-    summary = str(report.get("summary") or "").strip() or summary_fallback() or failure.strip()
+    summary = (
+        str(report.get("summary") or "").strip()
+        or explanation_from_log()
+        or summary_fallback()
+        or failure.strip()
+    )
     goals = report.get("goals") if isinstance(report.get("goals"), list) else []
     shots = [] if passed else copy_screenshots()
 
