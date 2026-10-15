@@ -66,19 +66,44 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# Prompts are read from the terminal, never from stdin. Run as `curl … | sh`, stdin
+# *is* this script, so reading it there swallows the script's own next lines — which
+# is exactly how a warning once became the dashboard's port number.
+read_answer() {
+  if [ -r /dev/tty ]; then
+    read -r answer < /dev/tty || answer=""
+  else
+    answer=""
+  fi
+}
+
 ask() {
   # $1 = question, $2 = default
   if [ "$ASSUME_YES" = "1" ]; then printf '%s' "$2"; return; fi
   printf '%s [%s]: ' "$1" "$2" >&2
-  read -r answer || true
+  read_answer
   printf '%s' "${answer:-$2}"
+}
+
+ask_port() {
+  # $1 = question, $2 = default — a port has to be a port.
+  value="$(ask "$1" "$2")"
+
+  case "$value" in
+    '' | *[!0-9]*)
+      warn "\"$value\" is not a port number; using $2."
+      value="$2"
+      ;;
+  esac
+
+  printf '%s' "$value"
 }
 
 confirm() {
   # $1 = question, $2 = default (y/n)
   if [ "$ASSUME_YES" = "1" ]; then [ "$2" = "y" ]; return; fi
   printf '%s [%s]: ' "$1" "$2" >&2
-  read -r answer || true
+  read_answer
   case "${answer:-$2}" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
 }
 
@@ -128,7 +153,7 @@ if [ -z "$WITH_TLS" ]; then
   fi
 fi
 
-WEB_PORT="$(ask "Host port for the dashboard" "$DEFAULT_WEB_PORT")"
+WEB_PORT="$(ask_port "Host port for the dashboard" "$DEFAULT_WEB_PORT")"
 if ! port_is_free "$WEB_PORT"; then
   FREE="$(next_free_port "$WEB_PORT")"
   warn "Port $WEB_PORT is already in use; using $FREE instead."
@@ -136,7 +161,7 @@ if ! port_is_free "$WEB_PORT"; then
 fi
 
 if [ "$WITH_DEVICE" = "1" ]; then
-  DEVICE_PORT="$(ask "Host port for the device's adb" "$DEFAULT_DEVICE_PORT")"
+  DEVICE_PORT="$(ask_port "Host port for the device's adb" "$DEFAULT_DEVICE_PORT")"
   if ! port_is_free "$DEVICE_PORT"; then
     FREE="$(next_free_port "$DEVICE_PORT")"
     warn "Port $DEVICE_PORT is already in use; using $FREE instead."
@@ -191,8 +216,25 @@ ENV
   chmod 600 .env
 else
   say "Keeping the existing .env"
-  WEB_PORT="$(sed -n 's/^WEB_PORT=//p' .env | head -1 || printf '%s' "$WEB_PORT")"
-  DEVICE_PORT="$(sed -n 's/^ANDROID_DEVICE=.*://p' .env | head -1 || printf '%s' "$DEVICE_PORT")"
+
+  # A port that is not a port (an older run could write one) would leave Docker
+  # refusing to start with a message about the compose file rather than the value.
+  stored_port="$(sed -n 's/^WEB_PORT=//p' .env | head -1 || true)"
+
+  case "$stored_port" in
+    '' | *[!0-9]*)
+      warn "The .env holds \"${stored_port}\" as WEB_PORT; rewriting it as ${WEB_PORT}."
+      sed -i "s|^WEB_PORT=.*|WEB_PORT=${WEB_PORT}|" .env
+      ;;
+    *) WEB_PORT="$stored_port" ;;
+  esac
+
+  stored_device="$(sed -n 's/^ANDROID_DEVICE=.*://p' .env | head -1 || true)"
+
+  case "$stored_device" in
+    '' | *[!0-9]*) DEVICE_PORT="$DEVICE_PORT" ;;
+    *) DEVICE_PORT="$stored_device" ;;
+  esac
 fi
 
 # ---------------------------------------------------------------- android sdk --
