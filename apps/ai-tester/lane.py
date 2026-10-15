@@ -468,9 +468,23 @@ def copy_screenshots(limit: int = 3) -> list[str]:
 
 
 def main() -> int:
+    # The stream is duplicated before anything else runs: the agent's logger binds
+    # its output stream when it is first imported, so a copy taken later would miss
+    # every line — including the verdict.
     WORK.mkdir(parents=True, exist_ok=True)
     TRACES.mkdir(parents=True, exist_ok=True)
 
+    with RUN_LOG.open("w", encoding="utf-8") as handle:
+        real_out, real_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = Tee(real_out, handle), Tee(real_err, handle)
+
+        try:
+            return _main()
+        finally:
+            sys.stdout, sys.stderr = real_out, real_err
+
+
+def _main() -> int:
     configure_endpoint()
 
     mission = "/work/mission.txt"
@@ -481,19 +495,13 @@ def main() -> int:
     failure = ""
     exhausted = False
 
-    with RUN_LOG.open("w", encoding="utf-8") as handle:
-        real_out, real_err = sys.stdout, sys.stderr
-        sys.stdout, sys.stderr = Tee(real_out, handle), Tee(real_err, handle)
-
-        try:
-            session_id = run(goal)
-        except BudgetExceeded as exc:
-            session_id = exc.session_id
-            exhausted = True
-        except Exception:  # noqa: BLE001 - the lane must always leave a verdict
-            failure = traceback.format_exc()
-        finally:
-            sys.stdout, sys.stderr = real_out, real_err
+    try:
+        session_id = run(goal)
+    except BudgetExceeded as exc:
+        session_id = exc.session_id
+        exhausted = True
+    except Exception:  # noqa: BLE001 - the lane must always leave a verdict
+        failure = traceback.format_exc()
 
     status = session_status(session_id) if session_id else ""
     tokens = usage(session_id) if session_id else {}
