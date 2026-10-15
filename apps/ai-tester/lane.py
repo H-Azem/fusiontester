@@ -36,16 +36,29 @@ TRACES = Path("/tmp/lane-traces")
 POLL_SECONDS = 5
 
 REPORT_SCHEMA = (
-    "Report your result as JSON with exactly this shape: "
-    '{"summary": "one sentence", "goals": [{"text": "the feature", '
-    '"status": "pass" or "fail", "evidence": "what on screen proves it"}]}. '
-    "One goal entry per feature named in the mission."
+    '{"summary": "one sentence", '
+    '"goals": [{"text": "the feature", "status": "pass" or "fail", '
+    '"evidence": "what on screen proves it"}]}'
 )
 
+# Stated before the mission and repeated after it. The note is the only thing the
+# pipeline can read back, so it must not be left in a status message instead.
 REPORT_INSTRUCTION = (
-    "\n\nBefore you finish, save your verdict as a single note:\n"
-    'call save_note(key="report", content=<the JSON described below>)\n'
-    + REPORT_SCHEMA
+    "HOW YOU WILL BE READ BACK\n"
+    "When the work is done, call the save_note tool once:\n"
+    '    save_note(key="report", content=<one JSON object>)\n'
+    "The content must be exactly this shape, with one goals entry per feature "
+    "named in the mission:\n"
+    "    " + REPORT_SCHEMA + "\n"
+    "Put nothing else in that note — no prose, no markdown fence. Wherever else you "
+    "describe the outcome (a status message, your closing summary), it is not read: "
+    "the note is.\n"
+    "--- mission ---\n"
+)
+
+REPORT_REMINDER = (
+    "\n\nBefore you stop: save_note(key=\"report\", content=" + REPORT_SCHEMA + ")\n"
+    "A verdict you write anywhere else is not read back."
 )
 
 
@@ -169,7 +182,7 @@ async def _run(mission: str, session_id: str, ceiling: int) -> None:
 
     task = asyncio.ensure_future(
         execute_task(
-            goal=mission + REPORT_INSTRUCTION,
+            goal=REPORT_INSTRUCTION + mission + REPORT_REMINDER,
             device_serial=os.environ.get("FUSION_DEVICE") or None,
             session_id=session_id,
             traces_output_path_str=str(TRACES),
