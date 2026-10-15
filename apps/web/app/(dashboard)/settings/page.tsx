@@ -9,6 +9,7 @@ import { SettingsGate, SettingsPasswordCard } from "@/components/settings-gate";
 import { TelegramSettings } from "@/components/telegram-settings";
 import { Icon } from "@/components/icons";
 import { StatusChip, relativeTime } from "@/components/status";
+import { FlutterSdkSettings } from "@/components/flutter-sdk-settings";
 
 type Config = {
   configured: boolean;
@@ -336,6 +337,7 @@ export default function SettingsPage() {
       <div className="stack">
         <GitlabSettings />
         <AiSettings />
+        <FlutterSdkSettings />
         <ManualApps />
         <TelegramSettings />
         <SettingsPasswordCard />

@@ -13,6 +13,18 @@ if [ -z "${APP_KEY:-}" ]; then
   exit 1
 fi
 
+# Flutter is baked into the image, but an SDK moved onto the volume by the
+# Settings page wins: it is the one that survived a redeploy. The chosen path is
+# exported (supervisord and every build inherit it) and written to .env so the
+# dashboard can say which SDK is in force.
+if [ -x /sdk/flutter/bin/flutter ]; then
+  FLUTTER_HOME=/sdk/flutter
+else
+  FLUTTER_HOME=/opt/flutter
+fi
+export FLUTTER_HOME
+export PATH="$FLUTTER_HOME/bin:$PATH"
+
 # The served app cannot see this environment: `php artisan serve` starts the built-in
 # server with a filtered one, so DB_DATABASE, APP_KEY and the rest never reach the
 # request handler — the app falls back to its own defaults and writes to a throwaway
@@ -27,6 +39,7 @@ for name in APP_ENV APP_KEY APP_DEBUG APP_URL WEB_ORIGIN \
             ADMIN_USERNAME ADMIN_PASSWORD \
             GIT_HOST GIT_TOKEN \
             ANDROID_SDK_PATH FUSION_ADB FUSION_ANDROID_DEVICE \
+            FLUTTER_HOME \
             SIDECAR_DIR SIDECAR_SCRIPTS SIDECAR_NODE; do
   value=$(printenv "$name" 2>/dev/null || true)
   if [ -n "$value" ]; then

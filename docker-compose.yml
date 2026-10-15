@@ -55,6 +55,9 @@ services:
       - pub-cache:/root/.pub-cache
       # adb, platforms, build-tools and the NDK the APK build needs.
       - ${ANDROID_SDK_PATH:-/root/android-sdk}:/root/android-sdk
+      # Where an SDK moved out of the image by the Settings page lives, so
+      # updating Flutter does not mean rebuilding the image.
+      - flutter-sdk:/sdk
       # The pipeline leaves "pause"/"resume" flags here for the host watcher that
       # stops the device for a build; the container itself gets no Docker socket.
       - ${FUSION_CONTROL_PATH:-/srv/fusion-control}:/control
@@ -101,3 +104,4 @@ volumes:
   run-workspaces:
   maestro-home:
   pub-cache:
+  flutter-sdk:

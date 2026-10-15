@@ -13,6 +13,7 @@ use App\Http\Controllers\RunController;
 use App\Http\Controllers\Settings\AiSettingsController;
 use App\Http\Controllers\Settings\AutomationTriggerController;
 use App\Http\Controllers\Settings\GitlabSettingsController;
+use App\Http\Controllers\Settings\FlutterSdkController;
 use App\Http\Controllers\Settings\ManualAppController;
 use App\Http\Controllers\Settings\TelegramSettingsController;
 use Illuminate\Support\Facades\Route;
@@ -44,6 +45,10 @@ Route::middleware('auth.session')->group(function () {
         Route::get('settings/ai', [AiSettingsController::class, 'show']);
         Route::put('settings/ai', [AiSettingsController::class, 'update']);
         Route::post('settings/ai/test', [AiSettingsController::class, 'test']);
+
+        Route::get('settings/flutter', [FlutterSdkController::class, 'show']);
+        Route::post('settings/flutter/update', [FlutterSdkController::class, 'update']);
+        Route::post('settings/flutter/restore', [FlutterSdkController::class, 'restore']);
 
         Route::get('settings/manual-apps', [ManualAppController::class, 'index']);
         Route::post('settings/manual-apps', [ManualAppController::class, 'store']);

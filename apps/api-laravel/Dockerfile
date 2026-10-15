@@ -100,7 +100,9 @@ RUN mkdir -p /data \
 
 COPY apps/api-laravel/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY apps/api-laravel/docker/supervisord.conf /etc/supervisor/conf.d/fusion.conf
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+# Lets Settings move the SDK to a volume and update it, without rebuilding.
+COPY apps/api-laravel/docker/flutter-sdk.sh /usr/local/bin/flutter-sdk
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/flutter-sdk
 
 EXPOSE 4000
 
