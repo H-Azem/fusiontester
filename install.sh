@@ -134,8 +134,15 @@ fi
 
 docker info >/dev/null 2>&1 || die "Docker is installed but not running."
 
-for tool in git curl ss openssl; do
-  command -v "$tool" >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq git curl iproute2 openssl; break; }
+# unzip is needed to unpack the SDK tools, and `java`: the Android SDK manager is
+# a Java program, and a fresh host has no JVM — the JDK the images carry is inside
+# them, not on the host.
+for tool in git curl ss openssl unzip java; do
+  command -v "$tool" >/dev/null 2>&1 || {
+    apt-get update -qq
+    apt-get install -y -qq git curl iproute2 openssl unzip default-jre-headless
+    break
+  }
 done
 
 # --------------------------------------------------------------------- prompts --
@@ -240,20 +247,36 @@ fi
 # ---------------------------------------------------------------- android sdk --
 # The api image carries Flutter, a JDK, Maestro and Chromium, but the Android SDK
 # stays on the host (it is several gigabytes and is mounted in). Without it the
-# web lane works and an APK build does not.
-if [ "$WITH_DEVICE" = "1" ] && [ ! -d /root/android-sdk/platform-tools ]; then
-  say "Installing the Android SDK into /root/android-sdk (a few gigabytes)"
+# web lane works and an APK build does not — so a failure here is a warning, never
+# the end of the install.
+install_android_sdk() {
+  set +e
+
   mkdir -p /root/android-sdk/cmdline-tools
   curl -fsSL -o /tmp/cmdline-tools.zip \
-    https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-  unzip -q -o /tmp/cmdline-tools.zip -d /tmp/cmdline-tools
+    https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip || return 1
+  unzip -q -o /tmp/cmdline-tools.zip -d /tmp/cmdline-tools || return 1
   rm -rf /root/android-sdk/cmdline-tools/latest
-  mv /tmp/cmdline-tools/cmdline-tools /root/android-sdk/cmdline-tools/latest
+  mv /tmp/cmdline-tools/cmdline-tools /root/android-sdk/cmdline-tools/latest || return 1
   rm -rf /tmp/cmdline-tools /tmp/cmdline-tools.zip
+
   SDKMANAGER=/root/android-sdk/cmdline-tools/latest/bin/sdkmanager
-  yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-  "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0" >/dev/null
+  yes | "$SDKMANAGER" --licenses >/dev/null 2>&1
+  "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "build-tools;35.0.0" >/dev/null || return 1
+
   ln -sf /root/android-sdk/platform-tools/adb /usr/local/bin/adb
+  return 0
+}
+
+if [ "$WITH_DEVICE" = "1" ] && [ ! -d /root/android-sdk/platform-tools ]; then
+  say "Installing the Android SDK into /root/android-sdk (a few gigabytes)"
+
+  if install_android_sdk; then
+    printf 'The Android SDK is ready.\n'
+  else
+    warn "The Android SDK could not be installed. The dashboard and the web lane still work;"
+    warn "an APK build needs it. Retry with: sudo sh install.sh"
+  fi
 fi
 
 # ----------------------------------------------------------------------- app --
