@@ -160,6 +160,17 @@ if [ -z "$WITH_TLS" ]; then
   fi
 fi
 
+# The dashboard listens on loopback by default because it expects a proxy. Without
+# one, the only way to reach it is to serve it on the public interface directly —
+# which is worth asking about, since it means credentials cross the network in the
+# clear.
+WEB_BIND=127.0.0.1
+if [ "$WITH_TLS" = "0" ]; then
+  if confirm "No proxy, then — expose the dashboard directly on the public interface? (no HTTPS)" n; then
+    WEB_BIND=0.0.0.0
+  fi
+fi
+
 WEB_PORT="$(ask_port "Host port for the dashboard" "$DEFAULT_WEB_PORT")"
 if ! port_is_free "$WEB_PORT"; then
   FREE="$(next_free_port "$WEB_PORT")"
@@ -235,6 +246,7 @@ WEB_ORIGIN=${WEB_ORIGIN}
 ADMIN_USERNAME=fusion
 ADMIN_PASSWORD=${ADMIN_PASSWORD}
 WEB_PORT=${WEB_PORT}
+FUSION_WEB_BIND=${WEB_BIND}
 ANDROID_DEVICE=172.17.0.1:${DEVICE_PORT}
 ANDROID_SDK_PATH=/root/android-sdk
 FUSION_CONTROL_PATH=/srv/fusion-control
@@ -261,6 +273,10 @@ else
     '' | *[!0-9]*) DEVICE_PORT="$DEVICE_PORT" ;;
     *) DEVICE_PORT="$stored_device" ;;
   esac
+
+  stored_bind="$(sed -n 's/^FUSION_WEB_BIND=//p' .env | head -1 || true)"
+  [ -n "$stored_bind" ] && WEB_BIND="$stored_bind"
+  grep -q '^FUSION_WEB_BIND=' .env || printf 'FUSION_WEB_BIND=%s\n' "$WEB_BIND" >> .env
 fi
 
 # ---------------------------------------------------------------- android sdk --
@@ -384,8 +400,11 @@ say "Done"
 HOST_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 if [ "$WITH_TLS" = "1" ]; then
   printf 'Dashboard : https://%s\n' "$DOMAIN"
-else
+elif [ "$WEB_BIND" = "0.0.0.0" ]; then
   printf 'Dashboard : http://%s:%s\n' "${HOST_IP:-<server>}" "$WEB_PORT"
+else
+  printf 'Dashboard : http://127.0.0.1:%s — loopback only, reachable through a proxy on this host\n' "$WEB_PORT"
+  printf '            (re-run with --domain <name> for nginx and a certificate, or set FUSION_WEB_BIND=0.0.0.0 in .env to serve it directly)\n'
 fi
 printf 'Admin     : fusion / %s\n' "$ADMIN_PASSWORD"
 [ "${GENERATED_PASSWORD:-0}" = "1" ] && printf '            (generated — change it after the first sign-in)\n'

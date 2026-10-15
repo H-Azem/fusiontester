@@ -97,8 +97,11 @@ services:
     mem_limit: 1g
     ports:
       # Host port is configurable because this is often a shared machine where
-      # 1999 is already taken by something else.
-      - "127.0.0.1:${WEB_PORT:-1999}:1999"
+      # 1999 is already taken by something else. The bind address is configurable
+      # for the same reason the port is: loopback by default, because the
+      # dashboard expects a proxy in front of it, and a host with no proxy can
+      # set FUSION_WEB_BIND=0.0.0.0 to serve it directly.
+      - "${FUSION_WEB_BIND:-127.0.0.1}:${WEB_PORT:-1999}:1999"
     depends_on:
       api:
         condition: service_healthy
